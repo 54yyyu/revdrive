@@ -40,6 +40,8 @@ select, input { font: inherit; color: var(--text); background: var(--panel); bor
 .brand svg { width: 26px; height: 26px; }
 .top .grow { flex: 1; }
 .top .note { color: var(--muted); font-size: 13px; }
+.toplink { font-size: 14px; color: var(--muted); text-decoration: none; }
+.toplink:hover { color: var(--text); }
 
 /* run header */
 .runhead { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 16px 24px 4px; }
@@ -186,6 +188,7 @@ dialog h2 { margin: 0 0 14px; font: 600 18px "IBM Plex Sans", sans-serif; }
   </div>
   <span class="note">a decision model at the wheel: pictures in, one-token answers out, a controller drives</span>
   <span class="grow"></span>
+  <a class="toplink" id="sitehome" href="./" hidden>← revdrive home</a>
   <button class="primary" id="newbtn">New run</button>
 </div>
 <div class="problem" id="problem"></div>
@@ -270,7 +273,7 @@ dialog h2 { margin: 0 0 14px; font: 600 18px "IBM Plex Sans", sans-serif; }
     </label>
     <label>Latency, s <input name="latency" type="number" min="0" step="0.05" placeholder="as measured"></label>
     <label class="check"><input name="mirror" type="checkbox"> mirrored course</label>
-    <label class="check"><input name="strict" type="checkbox"> strict: a cone touched ends the run</label>
+    <label class="check"><input name="lenient" type="checkbox"> lenient: count cones instead of stopping at the first</label>
     <div class="actions"><button value="cancel" formnovalidate>Cancel</button><button class="primary" value="start">Start</button></div>
   </form>
 </dialog>
@@ -313,7 +316,7 @@ async function loadRuns() {
   const tb = $("runs").querySelector("tbody");
   const liveRow = r.live ? `<tr data-live="1"><td>${esc(r.live.policy)} <span class="pill">live</span></td><td class="num">${r.live.seed}${r.live.mirrored ? " mirrored" : ""}</td><td>${esc(r.live.mode)}</td><td>running</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>` : "";
   tb.innerHTML = liveRow + rows.map(s => `<tr data-id="${esc(s.id)}">
-    <td>${esc(s.policy)}${s.strict ? " · strict" : ""}${s.prompt === "decisive" ? " · decisive" : ""}${s.memory ? " · memory" : ""}</td><td class="num">${s.seed}${s.mirrored ? " mirrored" : ""}</td>
+    <td>${esc(s.policy)}${s.strict === false ? " · lenient" : ""}</td><td class="num">${s.seed}${s.mirrored ? " mirrored" : ""}</td>
     <td>${esc(s.mode)}${s.latency != null ? " +" + s.latency + " s" : ""}</td>
     <td class="status ${s.status === "finished" ? "finished" : "bad"}">${esc(s.status)}</td>
     <td class="num"><span class="bar"><i style="width:${(s.progress * 100).toFixed(1)}%"></i></span>${pct(s.progress, 1)}</td>
@@ -340,7 +343,7 @@ function openLive() {
 function setupRun() {
   show("run");
   $("rname").textContent = run.policy;
-  $("rmeta").textContent = `course ${run.seed}${run.mirrored ? " mirrored" : ""}${run.strict ? " · strict" : ""}${run.prompt === "decisive" ? " · decisive prompt" : ""}${run.memory ? " · memory" : ""} · ${run.mode}${run.latency != null ? " + " + run.latency + " s" : ""} · picture ${run.size[0]}×${run.size[1]} · every ${run.period} s`;
+  $("rmeta").textContent = `course ${run.seed}${run.mirrored ? " mirrored" : ""}${run.strict === false ? " · lenient" : ""} · ${run.mode}${run.latency != null ? " + " + run.latency + " s" : ""} · picture ${run.size[0]}×${run.size[1]} · every ${run.period} s`;
   $("livepill").hidden = !run.live;
   $("stopbtn").hidden = !run.live;
   if (STATIC) { $("cam").hidden = true; $("vid").hidden = false; $("vid").src = `${STATIC.media}${run.id}.mp4`; }
@@ -785,7 +788,7 @@ $("newform").addEventListener("submit", e => {
   if (e.submitter && e.submitter.value !== "start") return;
   const f = new FormData($("newform"));
   fetch("/api/start", { method: "POST", body: JSON.stringify({ policy: f.get("policy"), seed: +f.get("seed"),
-    mode: f.get("mode"), mirror: f.get("mirror") === "on", strict: f.get("strict") === "on", latency: f.get("latency") === "" ? null : +f.get("latency") }) });
+    mode: f.get("mode"), mirror: f.get("mirror") === "on", strict: f.get("lenient") !== "on", latency: f.get("latency") === "" ? null : +f.get("latency") }) });
 });
 $("stopbtn").onclick = () => fetch("/api/stop", { method: "POST", body: "{}" });
 $("back").onclick = $("home").onclick = () => { show("runs"); history.replaceState(null, "", "#"); setPlaying(false); loadRuns(); };
@@ -800,7 +803,11 @@ addEventListener("resize", () => render());
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
 
 // ------------------------------------------------------------ start
-if (STATIC) { $("newbtn").hidden = true; }
+if (STATIC) {
+  $("newbtn").hidden = true; $("sitehome").hidden = false;
+  $("home").onclick = () => { location.href = "./"; };            // the logo goes back to the site
+  $("home").title = "revdrive home";
+}
 addEventListener("hashchange", () => {              // back, forward, or an edited link
   const h = location.hash.slice(1);
   if (h && h !== "live" && (!run || run.id !== h)) openRun(h);

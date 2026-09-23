@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>revdrive</title>
+<meta name="description" content="A one-token decision model drives a cone course from its camera. What the harness allows, how far the model gets, and why it stops.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --concrete: #e7e9ec; --slab: #f3f4f6; --ink: #15181c; --muted: #5f656e; --rule: #cfd3d8;
+  --cone: #f26a1b; --line: #2f5bd3; --ghost: #9aa3ae; --ok: #1f7a4d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --concrete: #17191c; --slab: #1f2226; --ink: #e8eaed; --muted: #9aa0a8; --rule: #33373d;
+    --cone: #ff7a2e; --line: #6c8cff; --ghost: #5b626b; --ok: #3fbf7f;
+  }
+}
+:root[data-theme="dark"] {
+  --concrete: #17191c; --slab: #1f2226; --ink: #e8eaed; --muted: #9aa0a8; --rule: #33373d;
+  --cone: #ff7a2e; --line: #6c8cff; --ghost: #5b626b; --ok: #3fbf7f;
+}
+* { box-sizing: border-box; }
+html { background: var(--concrete); }
+body { margin: 0; background: var(--concrete); color: var(--ink); font: 16px/1.6 "IBM Plex Sans", system-ui, sans-serif; }
+a { color: inherit; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--cone); }
+:focus-visible { outline: 2px solid var(--line); outline-offset: 2px; }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+h1, h2, .display { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; font-weight: 600; letter-spacing: .005em; }
+h2 { font-size: 34px; line-height: 1.05; margin: 0 0 6px; text-transform: uppercase; }
+.lede { color: var(--muted); max-width: 64ch; margin: 0 0 28px; }
+section { padding: 72px 0; border-top: 1px solid var(--rule); }
+
+/* top bar: a strip of start-line checker under it */
+header.top { display: flex; align-items: center; gap: 28px; padding: 18px 0; }
+.mark { font: 700 26px "Barlow Condensed", sans-serif; letter-spacing: .02em; text-transform: uppercase; text-decoration: none; display: flex; align-items: center; gap: 10px; }
+.mark svg { width: 20px; height: 22px; }
+nav { display: flex; gap: 22px; margin-left: auto; font-size: 15px; flex-wrap: wrap; }
+nav a { text-decoration: none; color: var(--muted); }
+nav a:hover { color: var(--ink); }
+@media (max-width: 640px) {
+  header.top { flex-wrap: wrap; gap: 6px 18px; padding: 14px 0 12px; }
+  nav { margin-left: 0; width: 100%; gap: 16px; font-size: 14px; }
+}
+.checker { height: 8px; background: repeating-conic-gradient(var(--ink) 0 25%, transparent 0 50%) 0 0 / 16px 16px; opacity: .85; }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 48px; padding: 56px 0 64px; align-items: center; }
+.eyebrow { font: 500 13px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .12em; color: var(--cone); }
+.hero h1 { font-size: clamp(44px, 6.4vw, 78px); line-height: .95; margin: 12px 0 20px; text-transform: uppercase; }
+.hero p { margin: 0 0 16px; max-width: 46ch; }
+.verdict { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); font-size: 15px; }
+.verdict b { font: 600 30px/1 "Barlow Condensed", sans-serif; }
+.verdict span { color: var(--muted); align-self: end; padding-bottom: 2px; }
+.map { background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; padding: 10px; }
+.map svg { width: 100%; height: auto; display: block; }
+.map figcaption { font-size: 13px; color: var(--muted); padding: 8px 6px 2px; display: flex; gap: 18px; flex-wrap: wrap; }
+.key i { display: inline-block; width: 18px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+.key i.dash { border-top-style: dashed; border-top-width: 2px; }
+.key i.dot { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--cone); }
+@media (max-width: 860px) { .hero { grid-template-columns: 1fr; } }
+
+/* the timing sheet */
+.sheet { width: 100%; border-collapse: collapse; font-size: 15px; }
+.sheet th { font: 500 12px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); text-align: left; padding: 0 12px 10px; border-bottom: 2px solid var(--ink); }
+.sheet td { padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+.sheet tr.db td { background: color-mix(in srgb, var(--slab) 70%, transparent); }
+.sheet .no { font: 600 26px "Barlow Condensed", sans-serif; width: 56px; }
+.sheet .lay { width: 88px; }
+.sheet .lay svg { width: 76px; height: 50px; display: block; }
+.sheet .geo { color: var(--muted); font-size: 13px; width: 150px; white-space: nowrap; }
+.cell { display: grid; grid-template-columns: 1fr 76px; gap: 10px; align-items: center; min-width: 170px; }
+.bar { height: 10px; background: var(--rule); border-radius: 1px; position: relative; overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--line); }
+.bar.oracle i { background: var(--ghost); }
+.bar.blind i { background: var(--muted); }
+.code { font: 500 13px "IBM Plex Mono", monospace; text-align: right; white-space: nowrap; }
+.code.fin { color: var(--ok); }
+.code.dnf { color: var(--cone); }
+.sheet tfoot td { font-weight: 600; border-bottom: 0; padding-top: 14px; }
+.sheet a.play { font-size: 13px; color: var(--muted); }
+.tablewrap { overflow-x: auto; }
+.note { font-size: 14px; color: var(--muted); margin-top: 14px; max-width: 80ch; }
+
+/* how it drives: a real sequence */
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; counter-reset: s; }
+.step { padding: 0 18px 0 0; }
+.step + .step { padding-left: 18px; border-left: 1px solid var(--rule); }
+.step .n { font: 600 42px/1 "Barlow Condensed", sans-serif; color: var(--cone); }
+.step h3 { font: 600 17px "IBM Plex Sans", sans-serif; margin: 8px 0 6px; }
+.step p { font-size: 14px; color: var(--muted); margin: 0; }
+@media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; gap: 24px 0; } .step:nth-child(odd) { border-left: 0; padding-left: 0; } }
+
+/* findings */
+.finds { display: grid; grid-template-columns: 1fr 1fr; gap: 28px 48px; }
+.find h3 { font: 600 24px/1.1 "Barlow Condensed", sans-serif; text-transform: uppercase; margin: 0 0 8px; }
+.find p { margin: 0; color: var(--muted); font-size: 15px; }
+.find q { color: var(--ink); font-style: italic; }
+@media (max-width: 760px) { .finds { grid-template-columns: 1fr; } }
+
+/* comparison */
+.vs { width: 100%; border-collapse: collapse; font-size: 15px; }
+.vs th { text-align: left; font: 600 20px "Barlow Condensed", sans-serif; text-transform: uppercase; padding: 0 16px 10px 0; border-bottom: 2px solid var(--ink); }
+.vs td { padding: 12px 16px 12px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.vs td:first-child { font: 500 12px "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); width: 120px; padding-top: 15px; }
+
+/* replays */
+.reels { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
+.reel { display: block; text-decoration: none; background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.reel:hover { border-color: var(--ink); }
+.reel div { padding: 10px 12px; display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.reel b { font: 600 20px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+
+/* motion: everything here is off under prefers-reduced-motion (see the end) */
+.reveal { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.7,.2,1); }
+.reveal.in { opacity: 1; transform: none; }
+.race-clock { font: 500 13px "IBM Plex Mono", monospace; fill: var(--muted); }
+#clock { font: 500 17px "IBM Plex Mono", monospace; fill: var(--ink); }
+.pop { transform-box: fill-box; transform-origin: center; animation: pop .45s cubic-bezier(.3,1.6,.5,1) both; }
+@keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.bar i { transition: width 1s cubic-bezier(.2,.7,.2,1); }
+
+/* the walk-through */
+.demo { background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; padding: 22px; margin-bottom: 30px; }
+.demo-head { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }
+.pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font: 500 12px "IBM Plex Mono", monospace; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); transition: all .3s; }
+.pill.on { background: var(--ink); color: var(--concrete); border-color: var(--ink); }
+.pill.done { color: var(--ink); border-color: var(--ink); }
+.demo-head .grow { flex: 1; }
+.again { font: 500 13px "IBM Plex Sans", sans-serif; background: none; border: 1px solid var(--rule); border-radius: 4px; padding: 5px 12px; color: var(--ink); cursor: pointer; }
+.again:hover { border-color: var(--ink); }
+.views { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.view { opacity: 0; transform: translateY(18px) rotate(var(--tilt)); transition: opacity .5s, transform .6s cubic-bezier(.2,.7,.2,1); }
+.view.in { opacity: 1; transform: none; }
+.view img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; border-radius: 3px; background: #0b0c0e; }
+.view .vl { font: 500 12px "IBM Plex Mono", monospace; color: var(--muted); margin: 6px 0 4px; display: flex; justify-content: space-between; }
+.ans { height: 46px; position: relative; }
+.ans::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--rule); }
+.ans i { position: absolute; left: 25%; right: 25%; height: 0; transition: height .7s cubic-bezier(.2,.7,.2,1); border-radius: 1px; }
+.ans i.up { bottom: 50%; background: var(--line); }
+.ans i.dn { top: 50%; background: var(--cone); }
+.ans small { position: absolute; right: 0; top: 0; font: 11px "IBM Plex Mono", monospace; color: var(--muted); opacity: 0; transition: opacity .4s .5s; }
+.ans.in small { opacity: 1; }
+.lower2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 18px; }
+.lower2 figure { margin: 0; background: var(--concrete); border: 1px solid var(--rule); border-radius: 3px; padding: 10px; opacity: .25; transition: opacity .6s; }
+.lower2 figure.in { opacity: 1; }
+.lower2 svg { width: 100%; height: auto; display: block; }
+.lower2 figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.lower2 figcaption b { color: var(--ink); font-weight: 600; }
+.caption { margin: 16px 0 0; font-size: 15px; min-height: 2.8em; }
+.step { transition: opacity .4s; }
+.steps.playing .step { opacity: .45; }
+.steps.playing .step.on { opacity: 1; }
+.steps.playing .step.on .n { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 6px; }
+@media (max-width: 760px) { .views { grid-template-columns: repeat(5, 1fr); gap: 5px; } .view .vl { font-size: 10px; } .lower2 { grid-template-columns: 1fr; } }
+
+/* replay cards preview on hover */
+.reel .shot { position: relative; aspect-ratio: 16 / 9; background: #0b0c0e; }
+.reel .shot img, .reel .shot video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.reel .shot video { opacity: 0; transition: opacity .25s; }
+.reel.playing .shot video { opacity: 1; }
+.reel .shot .x { position: absolute; left: 8px; bottom: 6px; font: 500 11px "IBM Plex Mono", monospace; color: #fff; text-shadow: 0 1px 2px #000; opacity: 0; transition: opacity .25s; }
+.reel.playing .shot .x { opacity: 1; }
+
+pre { background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; padding: 16px 18px; overflow-x: auto; font: 14px/1.6 "IBM Plex Mono", monospace; }
+pre .c { color: var(--muted); }
+footer { padding: 36px 0 60px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 14px; }
+footer p { margin: 4px 0; max-width: 90ch; }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  .reveal, .view, .lower2 figure { opacity: 1 !important; transform: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="mark" href="./" aria-label="revdrive home">
+      <svg viewBox="0 0 20 22" aria-hidden="true"><path d="M7 2 H13 L18 19 H2 Z" fill="var(--cone)"/><path d="M5.2 9 H14.8 L15.9 12.5 H4.1 Z" fill="var(--concrete)"/><rect x="0" y="19" width="20" height="3" fill="var(--ink)"/></svg>
+      revdrive
+    </a>
+    <nav><a href="#results">Results</a><a href="#how">How it drives</a><a href="#findings">Findings</a><a href="replays.html">Replays</a><a href="https://github.com/54yyyu/revdrive">GitHub</a></nav>
+  </header>
+</div>
+<div class="checker" aria-hidden="true"></div>
+
+<main>
+<div class="wrap">
+  <div class="hero">
+    <div>
+      <div class="eyebrow">A cone course, one token at a time</div>
+      <h1>How far can a decision model drive?</h1>
+      <p>A simulated Corolla, an autocross course and a camera. About once a second, <a href="https://github.com/54yyyu/rev">rev</a> asks a served vision model ten left-or-right questions about what the camera sees and reads one token back from each. A controller drives to where the answers say the course goes.</p>
+      <p>The setup follows <a href="https://drivingbench.com">DrivingBench</a>: the same camera mount, cone density, walking pace, and the rule that a touched cone ends the run.</p>
+      <div class="verdict" id="verdict"></div>
+    </div>
+    <figure class="map" id="hero-map">
+      <svg id="hero-svg" role="img" aria-labelledby="hero-cap"></svg>
+      <figcaption id="hero-cap"></figcaption>
+    </figure>
+  </div>
+</div>
+
+<section id="results"><div class="wrap">
+  <h2>Results</h2>
+  <p class="lede" id="results-lede"></p>
+  <div class="tablewrap"><table class="sheet" id="sheet"></table></div>
+  <p class="note" id="sheet-note"></p>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2>How rev drives</h2>
+  <p class="lede">The model never steers. It says where the course is, and everything about driving belongs to a controller that can be tested without it.</p>
+  <div class="demo" id="demo" aria-label="One of rev's decisions, step by step">
+    <div class="demo-head">
+      <div class="pills" id="pills"></div><span class="grow"></span>
+      <span class="mono" style="font-size:13px;color:var(--muted)" id="demo-when"></span>
+      <button class="again" id="again" type="button">Play again</button>
+    </div>
+    <div class="views" id="views"></div>
+    <div class="lower2">
+      <figure id="dialfig"><svg id="dial" viewBox="0 0 320 180" role="img" aria-label="The direction rev read, and the true one"></svg><figcaption id="dialcap"></figcaption></figure>
+      <figure id="mapfig"><svg id="local" viewBox="0 0 320 180" role="img" aria-label="The point on the ground and the car steering to it"></svg><figcaption id="mapcap"></figcaption></figure>
+    </div>
+    <p class="caption" id="caption"></p>
+  </div>
+  <div class="steps" id="steps">
+    <div class="step"><div class="n">1</div><h3>Five views</h3><p>From the camera at the top of the windshield: the view ahead and views turned 15° and 30° each way, cut from the wide camera.</p></div>
+    <div class="step"><div class="n">2</div><h3>Ten questions</h3><p>For each view and its mirror image: is the middle of the lane left or right of the middle of the picture? One token each, all at once.</p></div>
+    <div class="step"><div class="n">3</div><h3>A direction</h3><p>The mirror cancels any lean to one side; a fitted linear readout turns the five answers into the course's direction.</p></div>
+    <div class="step"><div class="n">4</div><h3>A point on the ground</h3><p>Fixed in the world where the picture was taken, far enough ahead to still be ahead when the answer lands, a second later.</p></div>
+    <div class="step"><div class="n">5</div><h3>A controller</h3><p>Pure pursuit steers to the point; the model picks the speed as a digit, 0 for stop to 9 for the ceiling.</p></div>
+  </div>
+</div></section>
+
+<section id="findings"><div class="wrap">
+  <h2>Findings</h2>
+  <p class="lede">Each one measured; the full record, including everything that did not help, is in <a href="https://github.com/54yyyu/revdrive/blob/main/DECISIONS.md">DECISIONS.md</a>.</p>
+  <div class="finds">
+    <div class="find"><h3>The harness is not the limit</h3><p>Given the course's true direction instead of the model's, the same controller at the same one-second latency finishes every course without touching a cone.</p></div>
+    <div class="find"><h3>It cannot see a tight corner from inside it</h3><p>At a 90° corner the model says "left" with the same probability, 0.73, for every view and every mirror image. Asked in plain chat, it answers <q>the course proceeds straight ahead</q>.</p></div>
+    <div class="find"><h3>The question decides what can be read</h3><p>Asked how to turn the wheel, it steers away from the cones in front of it, the wrong way in a bend (r = −0.85). Asked whether the lane's middle is left or right of the picture's, it reads the direction to 3.9°.</p></div>
+    <div class="find"><h3>Less input reads better</h3><p>DrivingBench's full inputs, two cameras, a long task description and the wheel position, took the error from 3.9° to 6.6°. Extra pictures dilute the one the question is about.</p></div>
+    <div class="find"><h3>Slower goes further</h3><p>In a side-by-side test on course 0, a 1.5 m/s ceiling, their pace, took the model 78% of the way round; a 3.5 m/s ceiling, 30%. More answers per metre catch small misreadings before they reach a cone.</p></div>
+    <div class="find"><h3>Memory did not help</h3><p>Remembering its own recent answers, even weighted by confidence, locked in its confident mistakes: a quarter of its sure answers are more than 6° off.</p></div>
+  </div>
+</div></section>
+
+<section id="compare"><div class="wrap">
+  <h2>Compared with DrivingBench</h2>
+  <p class="lede">DrivingBench puts frontier agents in a real car through three tools and lets them reason. revdrive keeps what the model sees and may do as close as a one-token model allows, and gives up the rest.</p>
+  <div class="tablewrap"><table class="vs">
+    <thead><tr><th></th><th>DrivingBench</th><th>revdrive</th></tr></thead>
+    <tbody>
+      <tr><td>Model</td><td>Frontier agents that reason 2 to 30 s per step</td><td>Qwen3.8-27B, one token per question, about 1 s per decision</td></tr>
+      <tr><td>Sees</td><td>A narrow and a wide road camera at the top of the windshield; speed, measured steering, time left on the command</td><td>The same mount: five 90° views cut from the wide camera; speed</td></tr>
+      <tr><td>Controls</td><td>Steering (0 to 100% of 180°), speed (0.5 to 3.5 m/s), a 5 to 60 s duration, and stop</td><td>Where the course is, which the controller steers to; speed as a digit (0 is stop) up to 1.5 m/s; decides again every second</td></tr>
+      <tr><td>Memory</td><td>The whole conversation, and three attempts with reflection</td><td>None; the controller keeps the last point it was sent to</td></tr>
+      <tr><td>Ends a run</td><td>The operator brakes before a cone, a curb or the boundary</td><td>Touching a cone or crossing the cone line</td></tr>
+      <tr><td>Course</td><td>A real parking lot, about 130 m, an 8 m lane</td><td>Simulated: courses 0 to 9 generated (about 420 m, a 6 m lane) and course 100 laid out from their description</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">revdrive is not affiliated with DrivingBench; its numbers here come from their public report.</p>
+</div></section>
+
+<section id="replays"><div class="wrap">
+  <h2>Replays</h2>
+  <p class="lede">Every run is saved as a trace and drawn again: the camera view, the map, the telemetry, and each decision with the picture the model was shown and how far off it was.</p>
+  <div class="reels" id="reels"></div>
+</div></section>
+
+<section id="run-it"><div class="wrap">
+  <h2>Run it</h2>
+  <p class="lede">The oracle needs no model. rev and blind need an sglang server serving a Qwen vision model.</p>
+<pre><span class="c"># install</span>
+uv pip install git+https://github.com/54yyyu/revdrive
+
+<span class="c"># the harness's ceiling: the true direction, the same controller, rev's latency</span>
+revdrive run --policy oracle-point --courses 0-9,100 --latency 1.0
+
+<span class="c"># the model, and the model shown grey pictures</span>
+revdrive run --policy rev   --courses 0-9,100 --upstream http://HOST:PORT
+revdrive run --policy blind --courses 0-9,100 --upstream http://HOST:PORT
+
+<span class="c"># watch it drive, replay a run, or drive it yourself with the arrow keys</span>
+revdrive ui --upstream http://HOST:PORT
+revdrive summary</pre>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  <p>revdrive · MIT license · built on <a href="https://github.com/54yyyu/rev">rev</a> · <a href="https://github.com/54yyyu/revdrive">source</a></p>
+  <p>Not affiliated with DrivingBench, comma.ai or Toyota. A simulator: flat asphalt and low-poly cones, with fewer cues than a real lot.</p>
+</div></footer>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pct = v => `${Math.round(v * 100)}%`;
+const code = r => r.status === "finished" ? { t: `FIN ${Math.round(r.time)}s`, c: "fin" }
+  : { t: `${r.status === "hit a cone" ? "CONE" : "OFF"} ${pct(r.progress)}`, c: "dnf" };
+
+function bounds(course, margin) {
+  const xs = course.cones.map(c => c[0]), ys = course.cones.map(c => c[1]);
+  return [Math.min(...xs) - margin, Math.min(...ys) - margin, Math.max(...xs) + margin, Math.max(...ys) + margin];
+}
+function fit(course, w, h, pad) {
+  const [x0, y0, x1, y1] = bounds(course, 2), s = Math.min((w - 2 * pad) / (x1 - x0), (h - 2 * pad) / (y1 - y0));
+  const ox = (w - (x1 - x0) * s) / 2, oy = (h - (y1 - y0) * s) / 2;
+  const P = (x, y) => [+(ox + (x - x0) * s).toFixed(1), +(h - (oy + (y - y0) * s)).toFixed(1)];
+  P.scale = s;
+  return P;
+}
+const poly = (pts, P) => pts.map(([x, y]) => P(x, y).join(",")).join(" ");
+
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const lerp = (a, b, u) => a + (b - a) * u;
+function along(path, tt) {            // path points every 0.5 s; position and heading at time tt
+  const f = Math.min(tt / 0.5, path.length - 1), i = Math.floor(f), u = f - i, j = Math.min(i + 1, path.length - 1);
+  const k = Math.max(0, i - 1), h = Math.atan2(path[j][1] - path[k][1], path[j][0] - path[k][0]);
+  return { x: lerp(path[i][0], path[j][0], u), y: lerp(path[i][1], path[j][1], u), h, i };
+}
+function heroMap(board, course, rev, oracle) {
+  const svg = $("hero-svg"), [x0, y0, x1, y1] = bounds(course, 2);
+  const W = 640, H = Math.round(Math.max(340, Math.min(560, W * (y1 - y0) / (x1 - x0))));
+  const P = fit(course, W, H, 26), sc = P.scale;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const line = (pose, len, cls) => { const [x, y, h] = pose, nx = -Math.sin(h) * len, ny = Math.cos(h) * len;
+    const a = P(x - nx, y - ny), b = P(x + nx, y + ny);
+    return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" class="${cls}"/>`; };
+  const cones = course.cones.map(([x, y]) => { const [a, b] = P(x, y); return `<circle cx="${a}" cy="${b}" r="${Math.max(1.6, sc * 0.35).toFixed(1)}"/>`; }).join("");
+  const revPath = board.paths[rev.id], orPath = oracle ? board.paths[oracle.id] : null;
+  const end = P(...revPath[revPath.length - 1]), start = P(...course.start), fin = P(...course.finish);
+  const done = rev.status === "finished";
+  const label = done ? `finished, ${Math.round(rev.time)} s` : `${rev.status === "hit a cone" ? "cone" : "off"} at ${pct(rev.progress)}`;
+  const lx = end[0] + (end[0] > W * 0.62 ? -16 : 16), anchor = end[0] > W * 0.62 ? "end" : "start";
+  const k = Math.max(sc, 4.2);        // a car at least legible, with a nose so its heading shows
+  const car = (id, fill, op) => `<g id="${id}" opacity="${op}"><path d="M ${-2.3 * k} ${-0.95 * k} H ${1.6 * k} L ${2.5 * k} 0 L ${1.6 * k} ${0.95 * k} H ${-2.3 * k} Z" fill="${fill}" stroke="var(--slab)" stroke-width="1.6" stroke-linejoin="round"/></g>`;
+  svg.innerHTML = `
+    <style>.lane{fill:none;stroke:var(--rule);stroke-linejoin:round;stroke-linecap:round;opacity:.6}
+      .cones circle{fill:var(--cone)} .gate{stroke:var(--ink);stroke-width:3}
+      .lbl{font:600 21px "Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.03em;fill:var(--ink)}
+      .lbl.hit{fill:var(--cone)} .lbl.fin{fill:var(--muted);font-size:17px}</style>
+    <polyline class="lane" points="${poly(course.centre, P)}" stroke-width="${(2 * course.half_width * sc).toFixed(1)}"/>
+    <g class="cones">${cones}</g>
+    ${line(course.start, course.half_width + 1.2, "gate")}${line(course.finish, course.half_width + 1.2, "gate")}
+    <text class="lbl" x="${start[0]}" y="${start[1] + 26}" text-anchor="middle">start</text>
+    <polyline id="ghostline" fill="none" stroke="var(--ink)" stroke-opacity=".45" stroke-width="2" stroke-dasharray="6 5"/>
+    <polyline id="revline" fill="none" stroke="var(--line)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
+    ${orPath ? car("ghostcar", "var(--ghost)", 1) : ""}${car("revcar", "var(--ink)", 1)}
+    <g id="stop" opacity="0"><g transform="translate(${end[0]},${end[1]})"><g class="stopmark"><circle r="11" fill="var(--slab)" stroke="var(--cone)" stroke-width="3"/><path d="M-5 -5 L5 5 M5 -5 L-5 5" stroke="var(--cone)" stroke-width="3"/></g></g>
+      <text class="lbl hit" x="${lx}" y="${end[1] - 16}" text-anchor="${anchor}">${label}</text></g>
+    <text id="finlbl" class="lbl fin" x="${fin[0]}" y="${fin[1] - 16}" text-anchor="middle" opacity="0">oracle ${oracle ? code(oracle).t.toLowerCase() : ""}</text>
+    <text class="race-clock" x="14" y="24" id="clock"></text>`;
+  $("hero-cap").innerHTML = `<span class="key"><i style="border-color:var(--line)"></i>rev on course ${rev.seed}</span>` +
+    (oracle ? `<span class="key"><i class="dash" style="border-color:var(--ink);opacity:.5"></i>oracle-point: the true direction, same controller</span>` : "") +
+    `<span class="key"><i class="dot"></i>cones, 2.5 m apart</span><span class="key">real time × 40</span>`;
+  const revDur = (revPath.length - 1) * 0.5, orDur = orPath ? (orPath.length - 1) * 0.5 : revDur;
+  const total = Math.max(revDur, orDur), SPEED = 40, HOLD = 3.5;
+  const put = (id, pt) => { const [a, b] = P(pt.x, pt.y); $(id).setAttribute("transform", `translate(${a},${b}) rotate(${(-pt.h * 180 / Math.PI).toFixed(1)})`); };
+  const draw = (id, path, tt) => { const p = along(path, tt); $(id).setAttribute("points", poly(path.slice(0, p.i + 1).concat([[p.x, p.y]]), P)); return p; };
+  function frame(tt) {
+    const rp = draw("revline", revPath, Math.min(tt, revDur)); put("revcar", rp);
+    if (orPath) { const op = draw("ghostline", orPath, Math.min(tt, orDur)); put("ghostcar", op); }
+    const stopped = tt >= revDur && !done;
+    const st = $("stop"); if (stopped && st.getAttribute("opacity") !== "1") { st.setAttribute("opacity", "1"); st.querySelector(".stopmark").classList.add("pop"); }
+    if (!stopped) { st.setAttribute("opacity", "0"); st.querySelector(".stopmark").classList.remove("pop"); }
+    $("finlbl").setAttribute("opacity", orPath && tt >= orDur ? "1" : "0");
+    const m = Math.floor(tt / 60), sec = tt - 60 * m;
+    $("clock").textContent = `${m}:${sec.toFixed(0).padStart(2, "0")}  ×${SPEED}`;
+  }
+  if (REDUCED) { frame(total); return; }
+  let t0 = null, visible = true, raf = 0;
+  new IntersectionObserver(es => { visible = es[0].isIntersecting; if (visible && !raf) { t0 = null; raf = requestAnimationFrame(loop); } }).observe(svg);
+  function loop(now) {
+    raf = 0;
+    if (!visible) return;
+    if (t0 == null) t0 = now;
+    const tt = ((now - t0) / 1000) * SPEED;
+    frame(Math.min(tt, total));
+    if (tt > total + HOLD * SPEED) t0 = now;
+    raf = requestAnimationFrame(loop);
+  }
+  raf = requestAnimationFrame(loop);
+}
+
+function miniMap(board, course, runs) {
+  const W = 76, H = 50, P = fit(course, W, H, 3);
+  const r = runs.rev ? board.paths[runs.rev.id] : null;
+  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true"><polyline points="${poly(course.centre, P)}" fill="none" stroke="var(--rule)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>` +
+    (r ? `<polyline points="${poly(r, P)}" fill="none" stroke="var(--line)" stroke-width="1.8"/>` : "") + `</svg>`;
+}
+
+function cell(r, kind) {
+  if (!r) return `<td>–</td>`;
+  const c = code(r);
+  return `<td><div class="cell"><div class="bar ${kind}"><i style="width:${(r.progress * 100).toFixed(1)}%"></i></div><span class="code ${c.c}">${c.t}</span></div></td>`;
+}
+
+(async () => {
+  const board = await fetch("data/board.json").then(r => r.json());
+  const by = {};
+  for (const r of board.runs) (by[r.seed] ||= {})[r.policy] = r;
+  const seeds = Object.keys(by).map(Number).sort((a, b) => a - b);
+  const mean = p => { const rs = seeds.map(s => by[s][p]).filter(Boolean); return rs.length ? rs.reduce((a, r) => a + r.progress, 0) / rs.length : null; };
+  const done = p => seeds.map(s => by[s][p]).filter(r => r && r.status === "finished").length;
+  const revs = seeds.map(s => by[s].rev).filter(Boolean);
+
+  // hero: rev's furthest run, with the oracle's lap on the same course
+  const best = revs.slice().sort((a, b) => b.progress - a.progress)[0];
+  if (best) heroMap(board, board.courses[best.seed], best, by[best.seed]["oracle-point"]);
+  $("verdict").innerHTML =
+    `<b class="mono">${pct(mean("rev"))}</b><span>of the course, on average, before rev's first cone (${done("rev")} of ${revs.length} finished)</span>` +
+    `<b class="mono">${pct(mean("oracle-point"))}</b><span>for the same harness given the true direction (${done("oracle-point")} of ${seeds.length} finished)</span>` +
+    `<b class="mono">${pct(mean("blind"))}</b><span>for rev shown grey pictures</span>`;
+
+  $("results-lede").textContent = `Strict rules: the first cone touched ends the run. ${board.model}. Camera at the top of the windshield, a cone every 2.5 m, a ${board.protocol.top_speed} m/s ceiling. One run per course.`;
+  const head = `<thead><tr><th>Course</th><th>Layout</th><th>Length · bend</th><th>rev</th><th>oracle-point</th><th>blind</th><th></th></tr></thead>`;
+  const rows = seeds.map(s => {
+    const c = board.courses[s], runs = by[s];
+    const replay = runs.rev && board.replays.includes(runs.rev.id) ? `<a class="play" href="replays.html#${esc(runs.rev.id)}">replay</a>` : "";
+    return `<tr class="${s === 100 ? "db" : ""}"><td class="no mono">${s}</td><td class="lay">${miniMap(board, c, runs)}</td>
+      <td class="geo mono">${Math.round(c.length)} m · r ${Math.round(c.tightest_radius)} m${s === 100 ? "<br>after DrivingBench" : ""}</td>
+      ${cell(runs.rev, "")}${cell(runs["oracle-point"], "oracle")}${cell(runs.blind, "blind")}<td>${replay}</td></tr>`;
+  }).join("");
+  const foot = `<tfoot><tr><td colspan="3">Mean progress</td>` +
+    ["rev", "oracle-point", "blind"].map(p => `<td class="mono">${mean(p) == null ? "–" : pct(mean(p))}</td>`).join("") + `<td></td></tr></tfoot>`;
+  $("sheet").innerHTML = head + `<tbody>${rows}</tbody>` + foot;
+  $("sheet-note").textContent = "CONE: the run ended at the first cone touched, at that share of the course. OFF: the car crossed the cone line. FIN: finished, in seconds. Courses 0 to 9 are generated autocross layouts with a 6 m lane; course 100 follows DrivingBench's published description with an 8 m lane. Its first 90° corner comes right after the start, and there rev gets no further than blind.";
+
+  $("reels").innerHTML = board.replays.map(id => {
+    const r = board.runs.find(x => x.id === id), c = code(r);
+    return `<a class="reel" href="replays.html#${esc(id)}" data-id="${esc(id)}"><div class="shot"><img src="media/${esc(id)}.jpg" alt=""><video muted playsinline loop preload="none"></video><span class="x">×4</span></div><div><b>${esc(r.policy)} · ${r.seed}</b><span class="code ${c.c}">${c.t}</span></div></a>`;
+  }).join("");
+  reels();
+  countUp();
+  growBars();
+  reveals();
+  if (board.showcase) walkthrough(board.showcase);
+})();
+
+// The headline numbers count up once.
+function countUp() {
+  document.querySelectorAll("#verdict b").forEach(el => {
+    const target = parseFloat(el.textContent); if (REDUCED || isNaN(target)) return;
+    const t0 = performance.now(), dur = 1300;
+    const tick = now => { const u = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - u, 3);
+      el.textContent = `${Math.round(target * e)}%`; if (u < 1) requestAnimationFrame(tick); };
+    el.textContent = "0%"; requestAnimationFrame(tick);
+  });
+}
+
+// The board's bars grow row by row when it comes into view.
+function growBars() {
+  const bars = [...document.querySelectorAll("#sheet .bar i")];
+  if (REDUCED) return;
+  const widths = bars.map(b => b.style.width);
+  bars.forEach(b => b.style.width = "0");
+  new IntersectionObserver((es, ob) => {
+    if (!es[0].isIntersecting) return;
+    bars.forEach((b, k) => { b.style.transitionDelay = `${Math.floor(k / 3) * 70 + (k % 3) * 25}ms`; b.style.width = widths[k]; });
+    ob.disconnect();
+  }, { threshold: 0.15 }).observe($("sheet"));
+}
+
+// Replay cards play a muted clip of their run on hover or focus.
+function reels() {
+  document.querySelectorAll(".reel").forEach(card => {
+    const v = card.querySelector("video");
+    const start = () => {
+      if (REDUCED) return;
+      if (!v.src) { v.src = `media/${card.dataset.id}.mp4`; v.addEventListener("loadedmetadata", () => { v.currentTime = v.duration * 0.35; }, { once: true }); }
+      v.playbackRate = 4; card.classList.add("playing"); v.play().catch(() => {});
+    };
+    const stop = () => { card.classList.remove("playing"); v.pause(); };
+    card.addEventListener("mouseenter", start); card.addEventListener("focus", start);
+    card.addEventListener("mouseleave", stop); card.addEventListener("blur", stop);
+  });
+}
+
+// Section heads, findings and the comparison ease in as they arrive.
+function reveals() {
+  const els = document.querySelectorAll("section h2, section .lede, .find, .vs tbody tr, .reel");
+  if (REDUCED) return;
+  els.forEach(el => el.classList.add("reveal"));
+  const ob = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) return;
+    const sibs = [...e.target.parentElement.children].filter(x => x.classList.contains("reveal"));
+    e.target.style.transitionDelay = `${Math.min(6, sibs.indexOf(e.target)) * 60}ms`;
+    e.target.classList.add("in"); ob.unobserve(e.target);
+  }), { rootMargin: "0px 0px -8% 0px" });
+  els.forEach(el => ob.observe(el));
+}
+
+// One real decision, step by step: five views, ten answers, a direction, a point, the car steering to it.
+function walkthrough(sc) {
+  const deg = r => r * 180 / Math.PI, side = b => `${Math.abs(deg(b)).toFixed(1)}° ${b >= 0 ? "left" : "right"}`;
+  const STEPS = ["Five views", "Ten questions", "A direction", "A point on the ground", "A controller"];
+  const CAPTIONS = [
+    `The camera at the top of the windshield, ${Math.floor(sc.t / 60)}:${String(Math.round(sc.t % 60)).padStart(2, "0")} into rev's run on course 0: the view ahead, and views turned 15° and 30° each way.`,
+    "For each view and its mirror image: is the middle of the lane about " + Math.round(sc.d) + " m ahead left or right of the middle of the picture? Up is left, down is right; half the difference with the mirror cancels any lean.",
+    `The five answers, read through the fitted readout: the course is <b>${side(sc.bearing)}</b>. The true direction was ${side(sc.truth)}; rev read it ${Math.abs(deg(sc.bearing - sc.truth)).toFixed(1)}° short, as it usually does in bends.`,
+    `That direction becomes a point on the ground ${sc.d.toFixed(0)} m ahead, fixed where the picture was taken, so it is still right when the answer lands ${sc.seconds ? sc.seconds.toFixed(1) + " s" : "a second"} later.`,
+    `Pure pursuit steers to the point. The model picked the speed itself: ${(sc.speed * 3.6).toFixed(1)} km/h.`];
+  $("pills").innerHTML = STEPS.map((n, k) => `<span class="pill" data-k="${k}">${k + 1} · ${n}</span>`).join("");
+  $("demo-when").textContent = `course 0 · ${Math.floor(sc.t / 60)}:${String(Math.round(sc.t % 60)).padStart(2, "0")}`;
+  $("views").innerHTML = sc.views.map((v, k) => `<div class="view" style="--tilt:${(k - 2) * -2}deg">
+      <div class="vl"><span>${sc.view_deg[k] > 0 ? "+" : ""}${sc.view_deg[k]}°</span><span>${sc.view_deg[k] > 0 ? "left" : sc.view_deg[k] < 0 ? "right" : "ahead"}</span></div>
+      <img src="media/showcase/view${k}.jpg" alt="The view turned ${sc.view_deg[k]}°">
+      <div class="ans" data-v="${v}"><i class="${v >= 0 ? "up" : "dn"}"></i><small>${v >= 0 ? "left" : "right"} ${Math.abs(v).toFixed(2)}</small></div></div>`).join("");
+
+  // the dial: -45..45 deg of direction over ±60 deg of arc, left on the left
+  const cx = 160, cy = 168, R = 118, SPAN = 60 / 45;
+  const polar = (dd, r) => { const a = (90 + dd * SPAN) * Math.PI / 180; return [cx + r * Math.cos(a), cy - r * Math.sin(a)]; };
+  const arcPts = []; for (let d = -45; d <= 45; d += 3) arcPts.push(polar(d, R).map(v => v.toFixed(1)).join(","));
+  let ticks = "";
+  for (let d = -45; d <= 45; d += 15) {
+    const [a1, b1] = polar(d, R), [a2, b2] = polar(d, R - (d % 45 ? 8 : 14));
+    ticks += `<line x1="${a1.toFixed(1)}" y1="${b1.toFixed(1)}" x2="${a2.toFixed(1)}" y2="${b2.toFixed(1)}" stroke="var(--muted)" stroke-width="1.5"/>`;
+    if (d % 45 === 0) { const [a3, b3] = polar(d, R - 30);
+      ticks += `<text x="${a3.toFixed(1)}" y="${(b3 + 4).toFixed(1)}" text-anchor="middle" class="race-clock">${d === 0 ? "ahead" : "45° " + (d > 0 ? "left" : "right")}</text>`; }
+  }
+  const [tx, ty] = polar(deg(sc.truth), R - 2);
+  $("dial").innerHTML = `<polyline points="${arcPts.join(" ")}" fill="none" stroke="var(--rule)" stroke-width="3" stroke-linecap="round"/>${ticks}
+    <line x1="${cx}" y1="${cy}" x2="${tx.toFixed(1)}" y2="${ty.toFixed(1)}" stroke="var(--ink)" stroke-opacity=".45" stroke-width="2" stroke-dasharray="5 4"/>
+    <g id="needle" style="transform-origin:${cx}px ${cy}px; transition: transform 1.2s cubic-bezier(.3,1.4,.5,1)"><line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - R + 8}" stroke="var(--line)" stroke-width="4" stroke-linecap="round"/></g>
+    <circle cx="${cx}" cy="${cy}" r="6" fill="var(--ink)"/>`;
+  $("dialcap").innerHTML = `rev read <b>${side(sc.bearing)}</b> · true ${side(sc.truth)} (dashed)`;
+
+  // the local map: the car at the bottom, ahead is up
+  const M = 5.2, ox = 160, oy = 158, L = ([x, y]) => [ox - y * M, oy - x * M];
+  const cones = sc.cones.map(c => { const [a, b] = L(c); return `<circle cx="${a.toFixed(1)}" cy="${b.toFixed(1)}" r="2.6" fill="var(--cone)"/>`; }).join("");
+  const [gx, gy] = L(sc.target);
+  // the arc pure pursuit drives from the car (0,0) heading ahead to the target
+  const [px, py] = sc.target, kappa = 2 * py / (px * px + py * py);
+  const arc = []; for (let u = 0; u <= 1.0001; u += 0.05) { const sArc = u * Math.hypot(px, py) * 1.05;
+    const x = Math.abs(kappa) < 1e-6 ? sArc : Math.sin(kappa * sArc) / kappa, y = Math.abs(kappa) < 1e-6 ? 0 : (1 - Math.cos(kappa * sArc)) / kappa; arc.push(L([x, y])); }
+  $("local").innerHTML = `<polyline points="${sc.centre.map(c => L(c).map(v => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="var(--rule)" stroke-width="${(6 * M).toFixed(0)}" stroke-linejoin="round" stroke-linecap="round" opacity=".7"/>
+    ${cones}
+    <polyline id="arc" points="${arc.map(p => p.map(v => v.toFixed(1)).join(",")).join(" ")}" fill="none" stroke="var(--line)" stroke-width="2.5" stroke-dasharray="4 4" opacity="0"/>
+    <g id="target" opacity="0"><g transform="translate(${gx.toFixed(1)},${gy.toFixed(1)})"><g class="tmark"><circle r="7" fill="none" stroke="var(--line)" stroke-width="3"/><circle r="2" fill="var(--line)"/></g></g></g>
+    <g id="lcar" transform="translate(${ox},${oy})"><rect x="-4.6" y="-12" width="9.2" height="23" rx="2.5" fill="var(--ink)"/></g>`;
+  $("mapcap").innerHTML = `the point <b>${sc.d.toFixed(0)} m ahead</b> · speed chosen: <b>${(sc.speed * 3.6).toFixed(1)} km/h</b>`;
+
+  const views = [...document.querySelectorAll(".view")], ans = [...document.querySelectorAll(".ans")];
+  let timers = [];
+  const setStep = k => {
+    document.querySelectorAll(".pill").forEach(p => { const j = +p.dataset.k; p.classList.toggle("on", j === k); p.classList.toggle("done", j < k); });
+    document.querySelectorAll("#steps .step").forEach((p, j) => p.classList.toggle("on", j === k));
+    $("caption").innerHTML = CAPTIONS[k];
+  };
+  const reset = () => {
+    timers.forEach(clearTimeout); timers = [];
+    views.forEach(v => v.classList.remove("in")); ans.forEach(a => { a.classList.remove("in"); a.querySelector("i").style.height = "0"; });
+    $("dialfig").classList.remove("in"); $("mapfig").classList.remove("in");
+    $("needle").style.transform = "rotate(0deg)"; $("target").setAttribute("opacity", "0"); $("arc").setAttribute("opacity", "0");
+    $("target").querySelector(".tmark").classList.remove("pop");
+    $("lcar").setAttribute("transform", `translate(${ox},${oy})`);
+  };
+  const at_ = (ms, f) => timers.push(setTimeout(f, ms));
+  const driveCar = () => {
+    const t0 = performance.now(), dur = 1800;
+    const tick = now => { const u = Math.min(1, (now - t0) / dur), e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+      const f = e * (arc.length - 1), i = Math.floor(f), j = Math.min(i + 1, arc.length - 1), w = f - i;
+      const x = lerp(arc[i][0], arc[j][0], w), y = lerp(arc[i][1], arc[j][1], w);
+      const h = Math.atan2(arc[j][0] - arc[Math.max(0, j - 1)][0], -(arc[j][1] - arc[Math.max(0, j - 1)][1])) * 180 / Math.PI;
+      $("lcar").setAttribute("transform", `translate(${x.toFixed(1)},${y.toFixed(1)}) rotate(${(isNaN(h) ? 0 : h).toFixed(1)})`);
+      if (u < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  };
+  const play = () => {
+    reset(); document.getElementById("steps").classList.add("playing");
+    setStep(0); views.forEach((v, k) => at_(150 + k * 140, () => v.classList.add("in")));
+    at_(1900, () => { setStep(1); ans.forEach((a, k) => at_(k * 160, () => { a.classList.add("in");
+      a.querySelector("i").style.height = `${Math.min(50, Math.abs(+a.dataset.v) * 100 * 1.6).toFixed(1)}%`; })); });
+    at_(4400, () => { setStep(2); $("dialfig").classList.add("in"); at_(300, () => { $("needle").style.transform = `rotate(${(-deg(sc.bearing) * 60 / 45).toFixed(1)}deg)`; }); });
+    at_(7000, () => { setStep(3); $("mapfig").classList.add("in"); $("target").setAttribute("opacity", "1"); $("target").querySelector(".tmark").classList.add("pop"); });
+    at_(9300, () => { setStep(4); $("arc").setAttribute("opacity", ".8"); driveCar(); });
+  };
+  const final = () => { views.forEach(v => v.classList.add("in")); ans.forEach(a => { a.classList.add("in"); a.querySelector("i").style.height = `${Math.min(50, Math.abs(+a.dataset.v) * 160).toFixed(1)}%`; });
+    $("dialfig").classList.add("in"); $("mapfig").classList.add("in"); $("needle").style.transform = `rotate(${(-deg(sc.bearing) * 60 / 45).toFixed(1)}deg)`;
+    $("target").setAttribute("opacity", "1"); $("arc").setAttribute("opacity", ".8"); setStep(4); };
+  $("again").onclick = () => REDUCED ? final() : play();
+  if (REDUCED) { final(); return; }
+  new IntersectionObserver((es, ob) => { if (es[0].isIntersecting) { play(); ob.disconnect(); } }, { threshold: 0.35 }).observe($("demo"));
+}
+</script>
+</body>
+</html>

@@ -86,6 +86,39 @@ def render_thumbs(full: dict, course: S.Course, out: Path) -> None:
     r.release()
 
 
+def showcase(store: Store, runs: list[dict], out: Path) -> dict | None:
+    """One real decision for the landing page's walk-through: rev on course 0 in a
+    bend, read well but not perfectly (the one with the largest true bearing whose
+    reading is within 4 deg). Its five views are drawn again; the numbers are the
+    run's own."""
+    r = next((x for x in runs if x["policy"] == "rev" and x["seed"] == 0), None)
+    if r is None:
+        return None
+    full = store.load(r["id"])
+    good = [d for d in full["log"] if abs(d["truth"]) > math.radians(10) and abs(d["bearing"] - d["truth"]) < math.radians(4)]
+    if not good:
+        return None
+    d = max(good, key=lambda d: abs(d["truth"]))
+    course = S.make_course(r["seed"], r["mirrored"], r["spacing"])
+    st = state_at(full, course, S.Sim(course).cone_pos.copy(), d["t"])
+    rr = R.Renderer(course)
+    (out / "media" / "showcase").mkdir(parents=True, exist_ok=True)
+    for k, a in enumerate(P.VIEWS):
+        car = type(st.car)(x=st.car.x, y=st.car.y, yaw=st.car.yaw + a)
+        view = type(st)(car=car, cone_pos=st.cone_pos, cone_down=st.cone_down)
+        rr.render(view, 320, 180, R.VIEWS[full["camera"]]).save(out / "media" / "showcase" / f"view{k}.jpg", quality=80)
+    rr.release()
+    # the neighbourhood in the car's frame (x ahead, y left), for a small map
+    c, s_ = math.cos(st.car.yaw), math.sin(st.car.yaw)
+    local = lambda x, y: [round((x - st.car.x) * c + (y - st.car.y) * s_, 2), round(-(x - st.car.x) * s_ + (y - st.car.y) * c, 2)]
+    near = lambda pts: [local(x, y) for x, y in pts if -6 < (x - st.car.x) * c + (y - st.car.y) * s_ < 26
+                        and abs(-(x - st.car.x) * s_ + (y - st.car.y) * c) < 16]
+    return {"run": r["id"], "t": d["t"], "views": d["views"], "view_deg": [round(math.degrees(a)) for a in P.VIEWS],
+            "bearing": d["bearing"], "truth": d["truth"], "d": d["d"], "speed": round(d["speed"], 2),
+            "speed_p": d.get("speed_p"), "seconds": d.get("seconds"), "target": local(*d["target"]),
+            "centre": near(course.centre[::2].tolist()), "cones": near(course.cones.tolist())}
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--results", type=Path, default=ROOT / "results" / "runs.jsonl")
@@ -107,6 +140,7 @@ def main() -> int:
     board = {"protocol": PROTOCOL, "model": "Qwen3.8-27B (AWQ INT4), served by sglang, read through rev",
              "runs": runs, "courses": {str(s): course_json(s) for s in seeds}, "paths": {},
              "replays": [r["id"] for r in replays]}
+    board["showcase"] = showcase(store, runs, out)
     for r in runs:                                   # the car's line for the course maps, every 0.5 s
         full = store.load(r["id"])
         board["paths"][r["id"]] = [[round(x[1], 1), round(x[2], 1)] for x in full["trace"][::10]]
