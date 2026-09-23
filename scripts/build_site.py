@@ -119,6 +119,33 @@ def showcase(store: Store, runs: list[dict], out: Path) -> dict | None:
             "centre": near(course.centre[::2].tolist()), "cones": near(course.cones.tolist())}
 
 
+def hero(store: Store, runs: list[dict]) -> dict | None:
+    """The landing page's race: rev's furthest run and the oracle on the same course,
+    every 0.5 s: position, speed, progress, and for rev the direction error of the
+    decision in force at that moment (the colour of its trail)."""
+    revs = [r for r in runs if r["policy"] == "rev"]
+    if not revs:
+        return None
+    rev = max(revs, key=lambda r: r["progress"])
+    oracle = next((r for r in runs if r["policy"] == "oracle-point" and r["seed"] == rev["seed"]), None)
+
+    def track(r, errors):
+        full = store.load(r["id"])
+        log = [(d["applied"], abs(math.degrees(d["bearing"] - d["truth"]))) for d in full["log"] if "truth" in d]
+        out, k = [], 0
+        for row in full["trace"][::10]:
+            while errors and k + 1 < len(log) and log[k + 1][0] <= row[0]:
+                k += 1
+            point = [round(row[1], 2), round(row[2], 2), round(row[4], 2), round(row[8], 4)]
+            if errors:
+                point.append(round(log[k][1], 1) if log and log[k][0] <= row[0] else 0.0)
+            out.append(point)
+        return out
+
+    return {"seed": rev["seed"], "rev": rev, "oracle": oracle, "rev_track": track(rev, True),
+            "oracle_track": track(oracle, False) if oracle else None}
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--results", type=Path, default=ROOT / "results" / "runs.jsonl")
@@ -141,6 +168,7 @@ def main() -> int:
              "runs": runs, "courses": {str(s): course_json(s) for s in seeds}, "paths": {},
              "replays": [r["id"] for r in replays]}
     board["showcase"] = showcase(store, runs, out)
+    board["hero"] = hero(store, runs)
     for r in runs:                                   # the car's line for the course maps, every 0.5 s
         full = store.load(r["id"])
         board["paths"][r["id"]] = [[round(x[1], 1), round(x[2], 1)] for x in full["trace"][::10]]

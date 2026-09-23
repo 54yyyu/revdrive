@@ -56,9 +56,27 @@ nav a:hover { color: var(--ink); }
 .verdict { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--rule); font-size: 15px; }
 .verdict b { font: 600 30px/1 "Barlow Condensed", sans-serif; }
 .verdict span { color: var(--muted); align-self: end; padding-bottom: 2px; }
-.map { background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; padding: 10px; }
+.map { background: var(--slab); border: 1px solid var(--rule); border-radius: 4px; padding: 10px; position: relative; }
+.tower { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 20px; align-items: center;
+         padding: 4px 8px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--rule); }
+.tower .rows { display: grid; gap: 5px; }
+.tower .clk { display: flex; flex-direction: column; gap: 2px; }
+.tower .clk b { font: 600 34px/1 "Barlow Condensed", sans-serif; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.tower .clk span { font: 500 11px "IBM Plex Mono", monospace; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.tower .row { display: grid; grid-template-columns: 56px minmax(0, 1fr) 42px 76px; gap: 10px; align-items: center; }
+.tower .nm { font: 600 16px/1 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+.tower .pb { height: 6px; background: var(--rule); border-radius: 1px; overflow: hidden; }
+.tower .pb i { display: block; height: 100%; width: 0; background: var(--line); }
+.tower .row.or .pb i { background: var(--ink); opacity: .45; }
+.tower .pc { font: 500 12px "IBM Plex Mono", monospace; text-align: right; font-variant-numeric: tabular-nums; }
+.tower .st { font: 500 12px "IBM Plex Mono", monospace; text-align: right; color: var(--muted); white-space: nowrap; }
+.tower .st.cone { color: var(--cone); font-weight: 600; }
+.tower .st.fin { color: var(--ok); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; color: var(--muted); padding: 8px 6px 2px; align-items: center; }
+.legend .ramp { display: inline-block; width: 54px; height: 6px; border-radius: 1px; vertical-align: middle; margin: 0 6px;
+                background: linear-gradient(90deg, var(--line), var(--cone)); }
+@media (max-width: 560px) { .tower { grid-template-columns: 1fr; } .tower .clk { flex-direction: row; align-items: baseline; gap: 8px; } }
 .map svg { width: 100%; height: auto; display: block; }
-.map figcaption { font-size: 13px; color: var(--muted); padding: 8px 6px 2px; display: flex; gap: 18px; flex-wrap: wrap; }
 .key i { display: inline-block; width: 18px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
 .key i.dash { border-top-style: dashed; border-top-width: 2px; }
 .key i.dot { width: 7px; height: 7px; border: 0; border-radius: 50%; background: var(--cone); }
@@ -200,8 +218,9 @@ footer p { margin: 4px 0; max-width: 90ch; }
       <div class="verdict" id="verdict"></div>
     </div>
     <figure class="map" id="hero-map">
+      <div class="tower" id="tower" aria-live="off"></div>
       <svg id="hero-svg" role="img" aria-labelledby="hero-cap"></svg>
-      <figcaption id="hero-cap"></figcaption>
+      <figcaption class="legend" id="hero-cap"></figcaption>
     </figure>
   </div>
 </div>
@@ -320,59 +339,87 @@ const poly = (pts, P) => pts.map(([x, y]) => P(x, y).join(",")).join(" ");
 
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const lerp = (a, b, u) => a + (b - a) * u;
-function along(path, tt) {            // path points every 0.5 s; position and heading at time tt
-  const f = Math.min(tt / 0.5, path.length - 1), i = Math.floor(f), u = f - i, j = Math.min(i + 1, path.length - 1);
-  const k = Math.max(0, i - 1), h = Math.atan2(path[j][1] - path[k][1], path[j][0] - path[k][0]);
-  return { x: lerp(path[i][0], path[j][0], u), y: lerp(path[i][1], path[j][1], u), h, i };
-}
-function heroMap(board, course, rev, oracle) {
-  const svg = $("hero-svg"), [x0, y0, x1, y1] = bounds(course, 2);
-  const W = 640, H = Math.round(Math.max(340, Math.min(560, W * (y1 - y0) / (x1 - x0))));
-  const P = fit(course, W, H, 26), sc = P.scale;
+function rgb(css) { const c = document.createElement("canvas").getContext("2d"); c.fillStyle = css; const h = c.fillStyle;
+  return h.startsWith("#") ? [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)) : h.match(/\d+/g).slice(0, 3).map(Number); }
+const mix = (a, b, u) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * u)).join(",")})`;
+const clock = tt => `${Math.floor(tt / 60)}:${String(Math.floor(tt % 60)).padStart(2, "0")}`;
+
+function heroMap(board, course, hero) {
+  const svg = $("hero-svg"), [x0, y0, x1, y1] = bounds(course, 3);
+  const W = 640, H = Math.round(Math.max(360, Math.min(580, W * (y1 - y0) / (x1 - x0))));
+  const P = fit(course, W, H, 22), sc = P.scale, rev = hero.rev, oracle = hero.oracle;
+  const RT = hero.rev_track, OT = hero.oracle_track;
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const line = (pose, len, cls) => { const [x, y, h] = pose, nx = -Math.sin(h) * len, ny = Math.cos(h) * len;
-    const a = P(x - nx, y - ny), b = P(x + nx, y + ny);
-    return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" class="${cls}"/>`; };
-  const cones = course.cones.map(([x, y]) => { const [a, b] = P(x, y); return `<circle cx="${a}" cy="${b}" r="${Math.max(1.6, sc * 0.35).toFixed(1)}"/>`; }).join("");
-  const revPath = board.paths[rev.id], orPath = oracle ? board.paths[oracle.id] : null;
-  const end = P(...revPath[revPath.length - 1]), start = P(...course.start), fin = P(...course.finish);
-  const done = rev.status === "finished";
-  const label = done ? `finished, ${Math.round(rev.time)} s` : `${rev.status === "hit a cone" ? "cone" : "off"} at ${pct(rev.progress)}`;
-  const lx = end[0] + (end[0] > W * 0.62 ? -16 : 16), anchor = end[0] > W * 0.62 ? "end" : "start";
-  const k = Math.max(sc, 4.2);        // a car at least legible, with a nose so its heading shows
-  const car = (id, fill, op) => `<g id="${id}" opacity="${op}"><path d="M ${-2.3 * k} ${-0.95 * k} H ${1.6 * k} L ${2.5 * k} 0 L ${1.6 * k} ${0.95 * k} H ${-2.3 * k} Z" fill="${fill}" stroke="var(--slab)" stroke-width="1.6" stroke-linejoin="round"/></g>`;
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const BLUE = rgb(css("--line")), ORANGE = rgb(css("--cone")), ERR_MAX = 12;
+  const gate = (pose, id, word, flip) => {
+    const [x, y, h] = pose, [a, b] = P(x, y), w = 2 * (course.half_width + 0.8) * sc, deg = -h * 180 / Math.PI;
+    const off = course.half_width + 6, side = sgn => P(x - Math.sin(h) * off * sgn, y + Math.cos(h) * off * sgn);
+    let [lx, ly] = side(1); if (lx < 40 || lx > W - 40 || ly < 20 || ly > H - 10) [lx, ly] = side(-1);
+    return `<g transform="translate(${a},${b}) rotate(${deg.toFixed(1)})"><rect x="-4" y="${(-w / 2).toFixed(1)}" width="8" height="${w.toFixed(1)}" fill="url(#chk)"/></g>
+      <text id="${id}" class="glbl" x="${lx.toFixed(1)}" y="${(ly + 5).toFixed(1)}" text-anchor="middle">${word}</text>`;
+  };
+  const cones = course.cones.map(([x, y]) => { const [a, b] = P(x, y); return `<circle cx="${a}" cy="${b}" r="${Math.max(1.7, sc * 0.34).toFixed(1)}"/>`; }).join("");
+  const segs = RT.slice(1).map((p, i) => { const [a, b] = P(RT[i][0], RT[i][1]), [c, d] = P(p[0], p[1]);
+    return `<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="${mix(BLUE, ORANGE, Math.min(1, p[4] / ERR_MAX))}" visibility="hidden"/>`; }).join("");
+  const k = Math.max(sc, 4.4);
+  const carPath = `M ${-2.3 * k} ${-0.95 * k} H ${1.6 * k} L ${2.5 * k} 0 L ${1.6 * k} ${0.95 * k} H ${-2.3 * k} Z`;
+  const tag = (id, cls) => `<g id="${id}"><rect class="tagbg" rx="3" height="18"/><text class="${cls}" x="6" y="13"></text></g>`;
+  const end = P(RT.at(-1)[0], RT.at(-1)[1]);
   svg.innerHTML = `
-    <style>.lane{fill:none;stroke:var(--rule);stroke-linejoin:round;stroke-linecap:round;opacity:.6}
-      .cones circle{fill:var(--cone)} .gate{stroke:var(--ink);stroke-width:3}
-      .lbl{font:600 21px "Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.03em;fill:var(--ink)}
-      .lbl.hit{fill:var(--cone)} .lbl.fin{fill:var(--muted);font-size:17px}</style>
-    <polyline class="lane" points="${poly(course.centre, P)}" stroke-width="${(2 * course.half_width * sc).toFixed(1)}"/>
+    <defs><pattern id="chk" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" fill="var(--slab)"/><rect width="4" height="4" fill="var(--ink)"/><rect x="4" y="4" width="4" height="4" fill="var(--ink)"/></pattern></defs>
+    <style>.lane{fill:none;stroke:var(--rule);stroke-linejoin:round;stroke-linecap:round}
+      .cones circle{fill:var(--cone)} .glbl{font:600 15px "Barlow Condensed",sans-serif;letter-spacing:.08em;fill:var(--ink)}
+      .trail line{stroke-width:4.5;stroke-linecap:round}
+      .tagbg{fill:var(--slab);stroke:var(--rule)} .tagt{font:600 12px "IBM Plex Mono",monospace;fill:var(--ink)} .tagt.or{fill:var(--muted)}</style>
+    <polyline class="lane" points="${poly(course.centre, P)}" stroke-width="${(2 * course.half_width * sc).toFixed(1)}" opacity=".75"/>
     <g class="cones">${cones}</g>
-    ${line(course.start, course.half_width + 1.2, "gate")}${line(course.finish, course.half_width + 1.2, "gate")}
-    <text class="lbl" x="${start[0]}" y="${start[1] + 26}" text-anchor="middle">start</text>
-    <polyline id="ghostline" fill="none" stroke="var(--ink)" stroke-opacity=".45" stroke-width="2" stroke-dasharray="6 5"/>
-    <polyline id="revline" fill="none" stroke="var(--line)" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/>
-    ${orPath ? car("ghostcar", "var(--ghost)", 1) : ""}${car("revcar", "var(--ink)", 1)}
-    <g id="stop" opacity="0"><g transform="translate(${end[0]},${end[1]})"><g class="stopmark"><circle r="11" fill="var(--slab)" stroke="var(--cone)" stroke-width="3"/><path d="M-5 -5 L5 5 M5 -5 L-5 5" stroke="var(--cone)" stroke-width="3"/></g></g>
-      <text class="lbl hit" x="${lx}" y="${end[1] - 16}" text-anchor="${anchor}">${label}</text></g>
-    <text id="finlbl" class="lbl fin" x="${fin[0]}" y="${fin[1] - 16}" text-anchor="middle" opacity="0">oracle ${oracle ? code(oracle).t.toLowerCase() : ""}</text>
-    <text class="race-clock" x="14" y="24" id="clock"></text>`;
-  $("hero-cap").innerHTML = `<span class="key"><i style="border-color:var(--line)"></i>rev on course ${rev.seed}</span>` +
-    (oracle ? `<span class="key"><i class="dash" style="border-color:var(--ink);opacity:.5"></i>oracle-point: the true direction, same controller</span>` : "") +
-    `<span class="key"><i class="dot"></i>cones, 2.5 m apart</span><span class="key">real time × 40</span>`;
-  const revDur = (revPath.length - 1) * 0.5, orDur = orPath ? (orPath.length - 1) * 0.5 : revDur;
-  const total = Math.max(revDur, orDur), SPEED = 40, HOLD = 3.5;
-  const put = (id, pt) => { const [a, b] = P(pt.x, pt.y); $(id).setAttribute("transform", `translate(${a},${b}) rotate(${(-pt.h * 180 / Math.PI).toFixed(1)})`); };
-  const draw = (id, path, tt) => { const p = along(path, tt); $(id).setAttribute("points", poly(path.slice(0, p.i + 1).concat([[p.x, p.y]]), P)); return p; };
+    ${gate(course.start, "g-start", "START", false)}${gate(course.finish, "g-fin", "FINISH", true)}
+    <polyline id="ghostline" fill="none" stroke="var(--ink)" stroke-opacity=".4" stroke-width="2" stroke-dasharray="6 5"/>
+    <g class="trail" id="trail">${segs}</g>
+    ${OT ? `<g id="ghostcar"><path d="${carPath}" fill="var(--slab)" stroke="var(--ink)" stroke-opacity=".6" stroke-width="1.6"/></g>` : ""}
+    <g id="revcar"><path id="revbody" d="${carPath}" fill="var(--ink)" stroke="var(--slab)" stroke-width="1.6" stroke-linejoin="round"/></g>
+    ${OT ? tag("ghosttag", "tagt or") : ""}${tag("revtag", "tagt")}
+    <g id="stop" opacity="0" transform="translate(${end[0]},${end[1]})"><g class="stopmark"><circle r="12" fill="var(--slab)" stroke="var(--cone)" stroke-width="3"/><path d="M-5 -5 L5 5 M5 -5 L-5 5" stroke="var(--cone)" stroke-width="3"/></g></g>`;
+  $("tower").innerHTML = `<div class="clk"><b id="tclk">0:00</b><span>course ${hero.seed} · ×40</span></div><div class="rows">
+    <div class="row rv"><span class="nm">rev</span><span class="pb"><i id="tpr"></i></span><span class="pc" id="tpc">0%</span><span class="st" id="tst"></span></div>
+    ${OT ? `<div class="row or"><span class="nm">oracle</span><span class="pb"><i id="tpo"></i></span><span class="pc" id="tpco">0%</span><span class="st" id="tsto"></span></div>` : ""}</div>`;
+  $("hero-cap").innerHTML = `<span>rev's trail: direction error 0°<span class="ramp"></span>${ERR_MAX}°+</span>` +
+    (OT ? `<span>dashed: the oracle, given the true direction</span>` : "");
+
+  const lines = [...$("trail").children];
+  const at = (T, tt) => { const f = Math.min(tt / 0.5, T.length - 1), i = Math.floor(f), u = f - i, j = Math.min(i + 1, T.length - 1),
+    q = Math.max(0, i - 1); return { x: lerp(T[i][0], T[j][0], u), y: lerp(T[i][1], T[j][1], u), v: lerp(T[i][2], T[j][2], u),
+    pr: lerp(T[i][3], T[j][3], u), h: Math.atan2(T[j][1] - T[q][1], T[j][0] - T[q][0]), i }; };
+  const place = (id, tagId, p, label) => {
+    const [a, b] = P(p.x, p.y);
+    $(id).setAttribute("transform", `translate(${a.toFixed(1)},${b.toFixed(1)}) rotate(${(-p.h * 180 / Math.PI).toFixed(1)})`);
+    const t = $(tagId), tx = t.querySelector("text"); tx.textContent = label;
+    const w = tx.getComputedTextLength() + 12; t.querySelector("rect").setAttribute("width", w.toFixed(0));
+    t.setAttribute("transform", `translate(${(a - w / 2).toFixed(1)},${(b - 34).toFixed(1)})`);
+  };
+  const revDur = (RT.length - 1) * 0.5, orDur = OT ? (OT.length - 1) * 0.5 : revDur;
+  const total = Math.max(revDur, orDur), SPEED = 40, HOLD = 4;
+  const revEnd = rev.status === "finished" ? `FIN ${clock(rev.time)}` : `${rev.status === "hit a cone" ? "CONE" : "OFF"} ${pct(rev.progress)}`;
+  let shown = 0;
   function frame(tt) {
-    const rp = draw("revline", revPath, Math.min(tt, revDur)); put("revcar", rp);
-    if (orPath) { const op = draw("ghostline", orPath, Math.min(tt, orDur)); put("ghostcar", op); }
-    const stopped = tt >= revDur && !done;
+    const rp = at(RT, Math.min(tt, revDur)), stopped = tt >= revDur && rev.status !== "finished";
+    for (; shown < rp.i && shown < lines.length; shown++) lines[shown].setAttribute("visibility", "visible");
+    if (tt < 0.01) { lines.forEach(l => l.setAttribute("visibility", "hidden")); shown = 0; }
+    place("revcar", "revtag", rp, stopped ? "rev · stopped" : `rev · ${(rp.v * 3.6).toFixed(1)} km/h`);
+    $("revbody").setAttribute("fill", stopped ? "var(--cone)" : "var(--ink)");
+    $("tpr").style.width = `${(rp.pr * 100).toFixed(1)}%`; $("tpc").textContent = pct(rp.pr);
+    $("tst").textContent = stopped ? revEnd : ""; $("tst").className = "st" + (stopped ? " cone" : "");
     const st = $("stop"); if (stopped && st.getAttribute("opacity") !== "1") { st.setAttribute("opacity", "1"); st.querySelector(".stopmark").classList.add("pop"); }
     if (!stopped) { st.setAttribute("opacity", "0"); st.querySelector(".stopmark").classList.remove("pop"); }
-    $("finlbl").setAttribute("opacity", orPath && tt >= orDur ? "1" : "0");
-    const m = Math.floor(tt / 60), sec = tt - 60 * m;
-    $("clock").textContent = `${m}:${sec.toFixed(0).padStart(2, "0")}  ×${SPEED}`;
+    if (OT) {
+      const op = at(OT, Math.min(tt, orDur)), fin = tt >= orDur;
+      $("ghostline").setAttribute("points", poly(OT.slice(0, op.i + 1).map(p => [p[0], p[1]]).concat([[op.x, op.y]]), P));
+      place("ghostcar", "ghosttag", op, fin ? "oracle · finished" : "oracle");
+      $("tpo").style.width = `${(op.pr * 100).toFixed(1)}%`; $("tpco").textContent = pct(op.pr);
+      $("tsto").textContent = fin ? `FIN ${clock(oracle.time)}` : ""; $("tsto").className = "st" + (fin ? " fin" : "");
+    }
+    $("tclk").textContent = clock(Math.min(tt, total));
   }
   if (REDUCED) { frame(total); return; }
   let t0 = null, visible = true, raf = 0;
@@ -382,8 +429,7 @@ function heroMap(board, course, rev, oracle) {
     if (!visible) return;
     if (t0 == null) t0 = now;
     const tt = ((now - t0) / 1000) * SPEED;
-    frame(Math.min(tt, total));
-    if (tt > total + HOLD * SPEED) t0 = now;
+    if (tt > total + HOLD * SPEED) { t0 = now; frame(0); } else frame(Math.min(tt, total));
     raf = requestAnimationFrame(loop);
   }
   raf = requestAnimationFrame(loop);
@@ -412,8 +458,7 @@ function cell(r, kind) {
   const revs = seeds.map(s => by[s].rev).filter(Boolean);
 
   // hero: rev's furthest run, with the oracle's lap on the same course
-  const best = revs.slice().sort((a, b) => b.progress - a.progress)[0];
-  if (best) heroMap(board, board.courses[best.seed], best, by[best.seed]["oracle-point"]);
+  if (board.hero) heroMap(board, board.courses[board.hero.seed], board.hero);
   $("verdict").innerHTML =
     `<b class="mono">${pct(mean("rev"))}</b><span>of the course, on average, before rev's first cone (${done("rev")} of ${revs.length} finished)</span>` +
     `<b class="mono">${pct(mean("oracle-point"))}</b><span>for the same harness given the true direction (${done("oracle-point")} of ${seeds.length} finished)</span>` +
