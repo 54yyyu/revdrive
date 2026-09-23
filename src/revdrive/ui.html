@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>revdrive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --surface: #f5f6f7; --panel: #ffffff; --sunk: #eceef1; --text: #16181d; --muted: #6c7079; --grid: #dfe2e6;
+  --range: #c9ced4; --blue: #3b5bdb; --blue-soft: rgba(59, 91, 219, .12); --orange: #e8590c; --green: #087f5b;
+  --red: #c92a2a; --ink-on-dark: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface: #131519; --panel: #1a1d22; --sunk: #22262c; --text: #e6e8eb; --muted: #969ba3; --grid: #2a2e35;
+    --range: #3b4048; --blue: #5c7cfa; --blue-soft: rgba(92, 124, 250, .16); --orange: #e8590c; --green: #0ca678; --red: #fa5252;
+  }
+}
+:root[data-theme="dark"] {
+  --surface: #131519; --panel: #1a1d22; --sunk: #22262c; --text: #e6e8eb; --muted: #969ba3; --grid: #2a2e35;
+  --range: #3b4048; --blue: #5c7cfa; --blue-soft: rgba(92, 124, 250, .16); --orange: #e8590c; --green: #0ca678; --red: #fa5252;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--surface); color: var(--text); }
+body { font: 14px/1.45 "IBM Plex Sans", system-ui, sans-serif; }
+.num { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+button { font: 500 13px "IBM Plex Sans", sans-serif; color: var(--text); background: transparent; border: 1px solid var(--range);
+         border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--text); color: var(--surface); border-color: var(--text); }
+button.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+select, input { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--range);
+                border-radius: 6px; padding: 6px 8px; min-width: 0; }
+
+/* top bar */
+.top { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--grid); }
+.brand { display: flex; align-items: center; gap: 10px; font: 600 20px "IBM Plex Serif", Georgia, serif; cursor: pointer; }
+.brand svg { width: 26px; height: 26px; }
+.top .grow { flex: 1; }
+.top .note { color: var(--muted); font-size: 13px; }
+
+/* run header */
+.runhead { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 16px 24px 4px; }
+.back { color: var(--muted); cursor: pointer; }
+.back:hover { color: var(--text); }
+.runhead h1 { font: 600 22px "IBM Plex Sans", sans-serif; margin: 0; }
+.runhead .meta { color: var(--muted); }
+.pill { font: 500 11px "IBM Plex Sans", sans-serif; letter-spacing: .06em; text-transform: uppercase; padding: 2px 8px;
+        border-radius: 999px; background: var(--red); color: #fff; }
+.runhead .grow { flex: 1; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px; padding: 12px 24px; }
+.card { background: var(--panel); border: 1px solid var(--grid); border-radius: 8px; padding: 10px 14px; }
+.card .k { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.card .v { font: 500 22px "IBM Plex Mono", monospace; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .v.blue { color: var(--blue); }
+.card .v.word { font: 500 17px "IBM Plex Sans", sans-serif; padding-top: 5px; white-space: normal; line-height: 1.2; }
+.card .v.good { color: var(--green); }
+.card .v.bad { color: var(--red); }
+
+.run { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; padding: 6px 24px 28px; }
+@media (max-width: 1100px) { .run { grid-template-columns: 1fr; } .feed { max-height: 70vh; } }
+
+.tabs { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--grid); border-radius: 8px; padding: 3px; }
+.seg button { border: 0; border-radius: 6px; padding: 5px 14px; }
+.seg button.on { background: var(--text); color: var(--surface); }
+.tabs .grow { flex: 1; }
+.toggle { font-size: 12px; padding: 4px 10px; }
+
+.stage { position: relative; background: #0b0c0e; border-radius: 10px; overflow: hidden; aspect-ratio: 16 / 9; }
+.stage img.cam, .stage video.cam { width: 100%; height: 100%; object-fit: cover; display: block; }
+.stage canvas.bigmap { position: absolute; inset: 0; width: 100%; height: 100%; display: none; background: var(--panel); }
+.stage.map canvas.bigmap { display: block; }
+.stage.map .camonly { display: none !important; }
+.pip { position: absolute; left: 12px; top: 12px; width: 30%; border-radius: 6px; overflow: hidden;
+       box-shadow: 0 2px 10px rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.35); background: #000; }
+.pip img { width: 100%; display: block; }
+.pip span { position: absolute; left: 6px; bottom: 4px; font-size: 11px; color: #fff; text-shadow: 0 1px 2px #000; }
+.dcard { position: absolute; right: 12px; top: 12px; width: min(340px, 46%); background: rgba(250, 250, 251, .94);
+         color: #16181d; border-radius: 8px; padding: 10px 12px; font-size: 13px; box-shadow: 0 2px 12px rgba(0,0,0,.25); }
+.dcard .h { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 4px; }
+.dcard .h small { font-weight: 400; color: #6c7079; }
+.dcard .l { color: #3a3e46; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; background: #3b5bdb; margin-right: 7px; }
+.hud { position: absolute; left: 14px; bottom: 12px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+.hud .speed { font: 500 36px "IBM Plex Mono", monospace; line-height: 1; }
+.hud .unit { font-size: 12px; opacity: .85; }
+.wheel { position: absolute; right: 16px; bottom: 14px; width: 64px; height: 64px; }
+.chip { position: absolute; left: 50%; transform: translateX(-50%); bottom: 14px; padding: 3px 12px; border-radius: 999px;
+        font-size: 12px; background: rgba(0,0,0,.6); color: #fff; display: none; }
+.banner { position: absolute; inset: 0; display: none; place-items: center; background: rgba(0,0,0,.30); color: #fff;
+          font: 600 30px "IBM Plex Serif", serif; text-shadow: 0 2px 6px rgba(0,0,0,.6); pointer-events: none; }
+
+.scrub { position: relative; height: 34px; margin-top: 10px; cursor: pointer; touch-action: none; }
+.scrub canvas { width: 100%; height: 100%; display: block; }
+.transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.play { width: 40px; height: 40px; border-radius: 50%; background: var(--blue); border: 0; color: #fff; display: grid; place-items: center; padding: 0; }
+.play svg { width: 16px; height: 16px; fill: #fff; }
+.speeds button { border: 0; padding: 6px 10px; border-radius: 6px; }
+.transport .grow { flex: 1; }
+.clock { color: var(--text); }
+
+.lower { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+@media (max-width: 700px) { .lower { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--grid); border-radius: 10px; padding: 12px 14px; }
+.panel h3 { font: 500 13px "IBM Plex Sans", sans-serif; margin: 0 0 8px; color: var(--muted); display: flex; justify-content: space-between; }
+.minimap { position: relative; padding: 8px; cursor: pointer; }
+.minimap canvas { width: 100%; aspect-ratio: 1; display: block; }
+.minimap .open { position: absolute; right: 12px; bottom: 12px; font-size: 12px; background: var(--panel); border: 1px solid var(--grid);
+                 border-radius: 6px; padding: 3px 8px; }
+.lanes { display: grid; grid-template-columns: 150px minmax(0, 1fr); row-gap: 6px; column-gap: 12px; }
+.lane-l { font-size: 12px; color: var(--muted); padding-top: 2px; }
+.lane-l b { display: block; font: 500 20px "IBM Plex Mono", monospace; color: var(--text); }
+.lane-l .c { font-weight: 500; }
+.lane-l small { display: block; }
+.lane-c { height: 64px; background: var(--sunk); border-radius: 6px; cursor: crosshair; }
+.lane-c.thin { height: 26px; }
+.lane-c canvas { width: 100%; height: 100%; display: block; }
+
+.feed { background: var(--panel); border: 1px solid var(--grid); border-radius: 10px; overflow-y: auto; max-height: calc(100vh - 150px);
+        position: sticky; top: 12px; padding: 8px; }
+.feed .empty { color: var(--muted); padding: 16px; }
+.ev { border-radius: 8px; padding: 10px 12px; margin: 4px 0; cursor: pointer; }
+.ev.dec { background: var(--sunk); }
+.ev.note { color: var(--muted); padding: 4px 12px; }
+.ev.hit { color: var(--red); }
+.ev.end { background: var(--blue-soft); color: var(--text); }
+.ev.active { outline: 2px solid var(--blue); outline-offset: -2px; }
+.ev .h { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.ev .h small { color: var(--muted); font-weight: 400; }
+.ev .h .grow { flex: 1; }
+.ev img { width: 100%; aspect-ratio: 16 / 9; border-radius: 6px; display: block; margin: 8px 0 6px; background: #0b0c0e; object-fit: cover; }
+.ev .row { display: flex; gap: 10px; align-items: end; margin-top: 4px; }
+.mini { display: flex; gap: 2px; align-items: end; height: 34px; flex: 1; border-bottom: 1px solid var(--range); }
+.mini-l { font-size: 10px; color: var(--muted); display: flex; justify-content: space-between; margin-top: 2px; }
+.mini i { flex: 1; background: var(--range); border-radius: 1px; min-height: 1px; }
+.mini i.top { background: var(--blue); }
+.dv { display: flex; gap: 6px; height: 36px; flex: 1; border-top: 1px solid transparent; }
+.dv span { flex: 1; position: relative; }
+.dv span::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; border-top: 1px solid var(--range); }
+.dv i { position: absolute; left: 0; right: 0; min-height: 1px; border-radius: 1px; }
+.dv i.up { bottom: 50%; background: var(--blue); }
+.dv i.dn { top: 50%; background: var(--orange); }
+.ev .t { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.ev .t b { color: var(--text); font-weight: 500; }
+.icon { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; flex: none; }
+.icon.b { background: var(--blue); } .icon.g { background: var(--green); } .icon.r { background: var(--red); }
+.icon svg { width: 11px; height: 11px; fill: #fff; }
+
+/* runs list */
+.runs { padding: 18px 24px 40px; }
+.runs h2 { font: 600 18px "IBM Plex Sans", sans-serif; margin: 0 0 4px; }
+.runs p { color: var(--muted); margin: 0 0 14px; }
+.tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--grid); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: right; padding: 9px 12px; border-bottom: 1px solid var(--grid); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { text-align: left; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--sunk); }
+td .bar { display: inline-block; width: 70px; height: 5px; background: var(--grid); border-radius: 3px; overflow: hidden; vertical-align: middle; margin-right: 8px; }
+td .bar i { display: block; height: 100%; background: var(--blue); }
+.status.finished { color: var(--green); } .status.bad { color: var(--red); }
+
+dialog { border: 1px solid var(--grid); border-radius: 12px; background: var(--panel); color: var(--text); padding: 20px 22px; width: min(460px, 92vw); }
+dialog::backdrop { background: rgba(0,0,0,.35); }
+dialog h2 { margin: 0 0 14px; font: 600 18px "IBM Plex Sans", sans-serif; }
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.form label.wide { grid-column: 1 / -1; }
+.form label.check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); font-size: 14px; }
+.form .actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.problem { margin: 10px 24px 0; padding: 8px 12px; border-radius: 8px; background: rgba(201, 42, 42, .1); color: var(--red); display: none; }
+.hint { color: var(--muted); font-size: 12px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="brand" id="home">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="16" cy="16" r="3.2" fill="currentColor"/><path d="M4 18 L13 16.5 M19 16.5 L28 18 M16 19 L16 29" stroke="currentColor" stroke-width="2.4"/></svg>
+    revdrive
+  </div>
+  <span class="note">a decision model at the wheel: pictures in, one-token answers out, a controller drives</span>
+  <span class="grow"></span>
+  <button class="primary" id="newbtn">New run</button>
+</div>
+<div class="problem" id="problem"></div>
+
+<section class="runs" id="runsview">
+  <h2>Runs</h2>
+  <p>Every run is saved as a trace and replayed from it; any moment, including the exact picture the model was shown, is drawn again on request.</p>
+  <div class="tablewrap"><table id="runs"><thead><tr>
+    <th>driver</th><th>course</th><th>timing</th><th>end</th><th>progress</th><th>time</th><th>cones</th><th>decisions</th><th>model p50</th><th>when</th>
+  </tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="runview" hidden>
+  <div class="runhead">
+    <span class="back" id="back">← All runs</span>
+    <h1 id="rname">–</h1>
+    <span class="meta" id="rmeta"></span>
+    <span class="pill" id="livepill" hidden>live</span>
+    <span class="grow"></span>
+    <span class="hint" id="keyhint" hidden>↑ throttle · ↓ brake · ← → steer</span>
+    <button id="stopbtn" hidden>Stop</button>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="run">
+    <section>
+      <div class="tabs">
+        <div class="seg"><button class="on" id="tabcam">Camera</button><button id="tabmap">Map</button></div>
+        <button class="toggle on" id="tpip">model's view</button>
+        <button class="toggle on" id="tcard">decision</button>
+        <span class="grow"></span>
+      </div>
+      <div class="stage" id="stage">
+        <img class="cam camonly" id="cam" alt="The camera view">
+        <video class="cam camonly" id="vid" muted playsinline preload="auto" hidden></video>
+        <canvas class="bigmap" id="bigmap"></canvas>
+        <div class="pip camonly" id="pip"><img id="pipimg" alt="The picture the model was given"><span>what the model saw</span></div>
+        <div class="dcard" id="dcard" hidden></div>
+        <div class="hud camonly"><div class="speed num" id="hudspeed">0</div><div class="unit">km/h</div></div>
+        <svg class="wheel camonly" id="wheelsvg" viewBox="-32 -32 64 64" aria-hidden="true">
+          <g id="wheelg"><circle r="27" fill="none" stroke="#fff" stroke-width="5" opacity=".9"/>
+          <path d="M-27 2 L-8 4 L0 12 L8 4 L27 2" fill="none" stroke="#fff" stroke-width="5" opacity=".9"/>
+          <circle r="5" fill="#fff" opacity=".9"/><rect x="-2.5" y="-31" width="5" height="8" fill="#e8590c"/></g>
+        </svg>
+        <div class="chip" id="chip">world paused while the model reads</div>
+        <div class="banner" id="banner"></div>
+      </div>
+      <div class="scrub" id="scrub"><canvas id="scrubc"></canvas></div>
+      <div class="transport">
+        <button class="play" id="play" aria-label="Play"><svg viewBox="0 0 16 16" id="playicon"><path d="M3 1.5 L14 8 L3 14.5 Z"/></svg></button>
+        <div class="speeds" id="speeds"></div>
+        <button id="golive" hidden>Go live</button>
+        <span class="grow"></span>
+        <span class="clock num" id="clock">0:00.0 / 0:00.0</span>
+      </div>
+      <div class="lower">
+        <div class="panel minimap" id="minimap"><canvas id="minic"></canvas><span class="open">Map ↗</span></div>
+        <div class="panel">
+          <h3><span>Driving telemetry</span><span class="num" id="tclock"></span></h3>
+          <div class="lanes" id="lanes"></div>
+        </div>
+      </div>
+    </section>
+    <aside class="feed" id="feed"><div class="empty">No decisions yet.</div></aside>
+  </div>
+</section>
+
+<dialog id="newrun">
+  <h2>New run</h2>
+  <form class="form" method="dialog" id="newform">
+    <label class="wide">Driver
+      <select name="policy">
+        <option value="rev">rev: the model says where the course is; the controller drives</option>
+        <option value="blind">blind: rev shown grey pictures</option>
+        <option value="oracle-point">oracle-point: the true direction, same controller</option>
+        <option value="oracle-point~6">oracle-point~6: the true direction ± 6° of noise</option>
+        <option value="human">you, with the arrow keys</option>
+      </select>
+    </label>
+    <label>Course <input name="seed" type="number" min="0" value="0"></label>
+    <label>Timing
+      <select name="mode"><option value="realtime">real time</option><option value="lockstep">lockstep (world waits)</option></select>
+    </label>
+    <label>Latency, s <input name="latency" type="number" min="0" step="0.05" placeholder="as measured"></label>
+    <label class="check"><input name="mirror" type="checkbox"> mirrored course</label>
+    <label class="check"><input name="strict" type="checkbox"> strict: a cone touched ends the run</label>
+    <div class="actions"><button value="cancel" formnovalidate>Cancel</button><button class="primary" value="start">Start</button></div>
+  </form>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const VIEWS = ["+30°", "+15°", "0°", "−15°", "−30°"];
+// trace row: t x y yaw v wheel steer_cmd accel_cmd progress lateral hits
+const T = 0, X = 1, Y = 2, YAW = 3, V = 4, WHEEL = 5, STEER = 6, ACC = 7, PROG = 8, LAT = 9, HITS = 10;
+
+const fmtT = s => { if (s == null || isNaN(s)) return "–"; const m = Math.floor(s / 60); return `${m}:${(s - 60 * m).toFixed(1).padStart(4, "0")}`; };
+const pct = (v, d = 0) => v == null ? "–" : (v * 100).toFixed(d) + "%";
+const fx = (v, d = 1) => v == null ? "–" : Number(v).toFixed(d);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const topOf = p => Object.entries(p || {}).sort((a, b) => b[1] - a[1]);
+const endClass = s => s === "finished" ? "good" : (s === "running" ? "" : "bad");
+
+// ------------------------------------------------------------ state
+let run = null;             // the run on screen
+let t = 0, playing = false, speed = 1, follow = false;
+let liveMeta = null;        // the live run's meta from the server, if any
+
+function newRun(meta, course, live) {
+  return { ...meta, course, trace: [], cones: [], log: [], live, status: "running", summary: null, distance: 0 };
+}
+
+// ------------------------------------------------------------ views
+function show(view) {
+  $("runsview").hidden = view !== "runs";
+  $("runview").hidden = view !== "run";
+}
+// Built into the static site, the page reads saved files and plays pre-rendered video
+// instead of asking the server; window.REVDRIVE_STATIC = {data, media} marks that.
+const STATIC = window.REVDRIVE_STATIC || null;
+async function loadRuns() {
+  const r = await fetch(STATIC ? STATIC.data + "runs.json" : "/api/runs").then(r => r.json());
+  liveMeta = r.live;
+  const rows = r.runs;
+  const tb = $("runs").querySelector("tbody");
+  const liveRow = r.live ? `<tr data-live="1"><td>${esc(r.live.policy)} <span class="pill">live</span></td><td class="num">${r.live.seed}${r.live.mirrored ? " mirrored" : ""}</td><td>${esc(r.live.mode)}</td><td>running</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>` : "";
+  tb.innerHTML = liveRow + rows.map(s => `<tr data-id="${esc(s.id)}">
+    <td>${esc(s.policy)}${s.strict ? " · strict" : ""}${s.prompt === "decisive" ? " · decisive" : ""}${s.memory ? " · memory" : ""}</td><td class="num">${s.seed}${s.mirrored ? " mirrored" : ""}</td>
+    <td>${esc(s.mode)}${s.latency != null ? " +" + s.latency + " s" : ""}</td>
+    <td class="status ${s.status === "finished" ? "finished" : "bad"}">${esc(s.status)}</td>
+    <td class="num"><span class="bar"><i style="width:${(s.progress * 100).toFixed(1)}%"></i></span>${pct(s.progress, 1)}</td>
+    <td class="num">${s.time != null ? fx(s.time) + " s" : "–"}</td><td class="num">${s.cones_hit}</td>
+    <td class="num">${s.decisions}</td><td class="num">${s.model_p50 != null ? fx(s.model_p50, 2) + " s" : "–"}</td>
+    <td class="num">${esc((s.finished || "").slice(5, 16))}</td></tr>`).join("") ||
+    (liveRow ? "" : `<tr><td colspan="10" style="text-align:left;color:var(--muted)">No runs yet. Start one with New run.</td></tr>`);
+  tb.querySelectorAll("tr[data-id]").forEach(tr => tr.onclick = () => openRun(tr.dataset.id));
+  tb.querySelectorAll("tr[data-live]").forEach(tr => tr.onclick = () => openLive());
+}
+async function openRun(id) {
+  const full = await fetch(STATIC ? `${STATIC.data}${id}.json` : "/api/run?id=" + encodeURIComponent(id)).then(r => r.json());
+  if (full.error) return problem(full.error);
+  run = { ...full, live: false, summary: full };
+  setupRun(); t = 0; follow = false; setPlaying(true);
+  history.replaceState(null, "", "#" + id);
+}
+function openLive() {
+  if (!run || !run.live) { location.hash = ""; }
+  if (run && run.live) { setupRun(); follow = true; setPlaying(false); }
+}
+
+// ------------------------------------------------------------ run view
+function setupRun() {
+  show("run");
+  $("rname").textContent = run.policy;
+  $("rmeta").textContent = `course ${run.seed}${run.mirrored ? " mirrored" : ""}${run.strict ? " · strict" : ""}${run.prompt === "decisive" ? " · decisive prompt" : ""}${run.memory ? " · memory" : ""} · ${run.mode}${run.latency != null ? " + " + run.latency + " s" : ""} · picture ${run.size[0]}×${run.size[1]} · every ${run.period} s`;
+  $("livepill").hidden = !run.live;
+  $("stopbtn").hidden = !run.live;
+  if (STATIC) { $("cam").hidden = true; $("vid").hidden = false; $("vid").src = `${STATIC.media}${run.id}.mp4`; }
+  $("keyhint").hidden = !(run.live && run.policy === "human");
+  $("pip").hidden = !$("tpip").classList.contains("on") || !isModel();
+  buildFeed();
+  buildLanes();
+  render();
+}
+function duration() { return run && run.trace.length ? run.trace[run.trace.length - 1][T] : 0; }
+function rowAt(time) {
+  const tr = run.trace; if (!tr.length) return null;
+  let lo = 0, hi = tr.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (tr[m][T] <= time) lo = m; else hi = m - 1; }
+  return tr[lo];
+}
+function decisionAt(time) {
+  const L = run.log; let lo = -1, hi = L.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (L[m].t <= time) lo = m; else hi = m - 1; }
+  return lo >= 0 ? L[lo] : null;
+}
+function conesAt(time) {
+  const down = new Map();
+  for (const [te, j, x, y] of run.cones) if (te <= time) down.set(j, [x, y]);
+  return down;
+}
+
+function cardsHTML() {
+  const s = run.summary, r = rowAt(t) || [];
+  const last = run.trace[run.trace.length - 1] || [];
+  const errs = run.log.filter(d => d.truth != null && d.bearing != null).map(d => Math.abs(deg(d.bearing - d.truth)));
+  const secs = run.log.filter(d => d.seconds != null).map(d => d.seconds).sort((a, b) => a - b);
+  const p50 = secs.length ? secs[Math.floor(secs.length / 2)] : null;
+  const status = s ? s.status : (run.live ? "running" : run.status);
+  const time = s ? (s.time != null ? s.time : s.sim_seconds) : last[T];
+  const card = (k, v, cls = "") => `<div class="card"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
+  return card("Progress", pct(s ? s.progress : last[PROG], 1), "blue") +
+    card("Distance", (s ? fx(s.distance) : fx(run.distance)) + " m") +
+    card(s && s.time != null ? "Course time" : "Time", fmtT(time)) +
+    card("Decisions", s ? s.decisions : run.log.length) +
+    card("Cones hit", s ? s.cones_hit : (last[HITS] ?? 0), (s ? s.cones_hit : last[HITS]) ? "bad" : "") +
+    card("Model p50", p50 != null ? fx(p50, 2) + " s" : "–") +
+    card("Direction error", errs.length ? fx(errs.reduce((a, e) => a + e, 0) / errs.length, 1) + "°" : "–") +
+    card("End", status, "word " + endClass(status));
+}
+
+// frames: at most one in flight, always the newest wanted
+let camBusy = false, camWant = null, camShown = null;
+function wantFrame(url) {
+  camWant = url;
+  if (camBusy || camWant === camShown) return;
+  camBusy = true;
+  const u = camWant, img = new Image();
+  img.onload = () => { $("cam").src = u; camShown = u; camBusy = false; if (camWant !== camShown) wantFrame(camWant); };
+  img.onerror = () => { camBusy = false; };
+  img.src = u;
+}
+function frameURL(time, w = 960, h = 540) {
+  if (STATIC) return `${STATIC.media}${run.id}/t${time.toFixed(2)}.jpg`;     // the model's picture at each decision
+  return `/api/frame?id=${encodeURIComponent(run.id)}&t=${time.toFixed(2)}&w=${w}&h=${h}`;
+}
+function syncVideo(force = false) {
+  // Put the video where the clock is. Before the video has loaded, wait for it.
+  const v = $("vid");
+  if (!v.src) return;
+  if (isNaN(v.duration)) { v.addEventListener("loadedmetadata", () => syncVideo(true), { once: true }); return; }
+  if ((force || !playing || Math.abs(v.currentTime - t) > 0.3) && Math.abs(v.currentTime - t) > 0.03)
+    v.currentTime = Math.min(t, v.duration - 0.01);
+}
+
+function render() {
+  if (!run) return;
+  const dur = duration();
+  const r = rowAt(t);
+  $("cards").innerHTML = cardsHTML();
+  $("clock").textContent = `${fmtT(t)} / ${fmtT(dur)}`;
+  $("tclock").textContent = `${fmtT(t)} / ${fmtT(dur)}`;
+  $("golive").hidden = !(run.live && !follow);
+  if (r) {
+    $("hudspeed").textContent = Math.round(r[V] * 3.6);
+    $("wheelg").setAttribute("transform", `rotate(${(-r[WHEEL] * 450).toFixed(1)})`);   // lock to lock is 2.5 turns
+  }
+  // camera
+  if (!$("stage").classList.contains("map")) {
+    if (STATIC) syncVideo();
+    else if (run.live && follow) wantFrame("/api/frame?id=live&n=" + (r ? r[T] : 0));
+    else if (!run.live) wantFrame(frameURL(Math.round(t * 20) / 20));
+  }
+  // decision overlay and picture-in-picture
+  const d = decisionAt(t);
+  const pipOn = $("tpip").classList.contains("on") && isModel();
+  $("pip").hidden = !pipOn || !d;
+  if (pipOn && d) {
+    const src = d.frame ? "data:image/jpeg;base64," + d.frame : frameURL(d.t, run.size[0], run.size[1]);
+    if ($("pipimg").dataset.t !== String(d.t)) { $("pipimg").src = src; $("pipimg").dataset.t = String(d.t); }
+  }
+  const cardOn = $("tcard").classList.contains("on");
+  $("dcard").hidden = !cardOn || !d;
+  if (cardOn && d) $("dcard").innerHTML = decisionCard(d);
+  // chip and banner
+  const thinking = run.live && follow && run.thinking;
+  $("chip").style.display = thinking ? "block" : "none";
+  const status = run.summary ? run.summary.status : run.status;
+  const atEnd = (!run.live && t >= dur - 0.01) || (run.live && status !== "running");
+  $("banner").style.display = atEnd && status && status !== "running" ? "grid" : "none";
+  $("banner").textContent = status === "finished" ? `Finished in ${fx(run.summary ? run.summary.time : 0)} s` : (status || "");
+  drawScrub(); drawMaps(); drawLanes(); markFeed();
+}
+
+const isModel = () => run && /^(rev|blind)$/.test(run.policy);
+const deg = r => r * 180 / Math.PI;
+const side = b => `${fx(Math.abs(deg(b)), 1)}° ${b >= 0 ? "left" : "right"}`;
+function viewBars(v) {
+  // + : the lane's middle is left of that view's middle; bars grow up for left, down for right
+  return `<div class="row"><div class="dv">${v.map((x, k) => `<span title="view ${VIEWS[k]}: lane ${x >= 0 ? "left" : "right"} of its middle, ${fx(Math.abs(x), 2)}"><i class="${x >= 0 ? "up" : "dn"}" style="height:${Math.min(50, Math.abs(x) * 100).toFixed(1)}%"></i></span>`).join("")}</div></div>
+    <div class="mini-l"><span>view +30° (left)</span><span>lane left ↑ / right ↓ of each view's middle (±0.5 fills)</span><span>−30°</span></div>`;
+}
+function answerLines(d, card) {
+  const err = d.truth != null ? Math.abs(deg(d.bearing - d.truth)) : null;
+  const sp = d.speed_p ? ` (digit ${fx(d.speed_p.reduce((a, p, i) => a + p * i, 0), 1)} of 9)` : "";
+  const cls = card ? "l" : "t";
+  return `<div class="${cls}">course <b>${side(d.bearing)}</b>${err != null ? ` · true ${side(d.truth)} · off <b style="color:${err > 6 ? "var(--red)" : "inherit"}">${fx(err, 1)}°</b>` : ""}</div>
+    <div class="${cls}">aim ${fx(d.d, 0)} m ahead · <b>${fx(d.speed * 3.6, 0)}</b> km/h${sp}</div>` +
+    (d.seconds != null ? `<div class="${cls}" style="color:${card ? "#6c7079" : "var(--muted)"}">model ${fx(d.seconds, 2)} s · landed ${fx(d.applied - d.t, 2)} s after the picture · sure ${fx(d.conf, 2)}</div>` : "");
+}
+function decisionCard(d) {
+  const ago = Math.max(0, t - d.t);
+  const head = `<div class="h"><span><span class="dot"></span>decide</span><small>${fx(ago, 1)} s ago</small></div>`;
+  if (d.bearing != null) return head + answerLines(d, true);
+  return head + `<div class="l">wheel ${fx(d.steer * 100, 0)}% · ${fx(d.accel, 1)} m/s²</div>`;
+}
+
+// ------------------------------------------------------------ scrubber
+function sizeCanvas(c) {
+  const dpr = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const g = c.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return [g, w, h];
+}
+function drawScrub() {
+  const [g, w, h] = sizeCanvas($("scrubc")), dur = Math.max(duration(), 0.001), pad = 8, y = h / 2;
+  const X_ = s => pad + (w - 2 * pad) * Math.min(s / dur, 1);
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = css("--grid"); g.fillRect(pad, y - 2, w - 2 * pad, 4);
+  g.fillStyle = css("--blue"); g.fillRect(pad, y - 2, X_(t) - pad, 4);
+  g.fillStyle = css("--range");
+  const step = Math.max(1, Math.floor(run.log.length / ((w - 2 * pad) / 3)));
+  for (let i = 0; i < run.log.length; i += step) g.fillRect(X_(run.log[i].t) - 0.5, y - 9, 1, 5);
+  g.fillStyle = css("--red");
+  for (const [te] of run.cones) g.fillRect(X_(te) - 1, y + 4, 2, 7);
+  const st = run.summary ? run.summary.started_at : run.started_at;
+  if (st != null) { g.fillStyle = css("--green"); g.fillRect(X_(st) - 1, y - 10, 2, 20); }
+  g.fillStyle = css("--blue"); g.beginPath(); g.arc(X_(t), y, 7, 0, 7); g.fill();
+  g.fillStyle = css("--panel"); g.beginPath(); g.arc(X_(t), y, 3, 0, 7); g.fill();
+}
+function seekFromEvent(e, el) {
+  const rect = el.getBoundingClientRect(), pad = 8;
+  const u = Math.min(Math.max((e.clientX - rect.left - pad) / (rect.width - 2 * pad), 0), 1);
+  t = u * duration(); follow = false; render();
+}
+(() => {
+  const el = $("scrub"); let drag = false;
+  el.addEventListener("pointerdown", e => { drag = true; el.setPointerCapture(e.pointerId); seekFromEvent(e, el); });
+  el.addEventListener("pointermove", e => { if (drag) seekFromEvent(e, el); });
+  el.addEventListener("pointerup", () => drag = false);
+})();
+
+// ------------------------------------------------------------ transport
+const SPEEDS = [1, 2, 4, 8, 16];
+$("speeds").innerHTML = SPEEDS.map(s => `<button data-s="${s}" class="${s === 1 ? "on" : ""}">${s}×</button>`).join("");
+$("speeds").querySelectorAll("button").forEach(b => b.onclick = () => {
+  speed = +b.dataset.s; $("speeds").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  if (STATIC) $("vid").playbackRate = speed;
+});
+function setPlaying(p) {
+  playing = p;
+  if (STATIC && $("vid").src) { const v = $("vid"); v.playbackRate = speed; if (p) { syncVideo(true); v.play().catch(() => {}); } else v.pause(); }
+  $("playicon").innerHTML = p ? '<path d="M3 2 H6.5 V14 H3 Z M9.5 2 H13 V14 H9.5 Z"/>' : '<path d="M3 1.5 L14 8 L3 14.5 Z"/>';
+}
+$("play").onclick = () => {
+  if (run && run.live) { follow = !follow; setPlaying(false); if (follow) t = duration(); render(); return; }
+  if (!playing && t >= duration() - 0.01) t = 0;
+  setPlaying(!playing);
+};
+$("golive").onclick = () => { follow = true; t = duration(); render(); };
+let lastFrame = performance.now();
+function tick(now) {
+  const dt = (now - lastFrame) / 1000; lastFrame = now;
+  if (run && !run.live && playing && STATIC && $("vid").src) {
+    const v = $("vid"); if (!v.seeking && v.readyState >= 2) t = Math.min(v.currentTime, duration());
+    if (v.ended || t >= duration() - 0.02) setPlaying(false);
+    render();
+  } else if (run && !run.live && playing) {
+    t = Math.min(t + dt * speed, duration());
+    if (t >= duration()) setPlaying(false);
+    render();
+  } else if (run && run.live && !follow && playing) {
+    t = Math.min(t + dt * speed, duration()); render();
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+addEventListener("keydown", e => {
+  if (!run || $("runview").hidden || e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if (run.live && run.policy === "human") return;
+  if (e.key === " ") { e.preventDefault(); $("play").click(); }
+  if (e.key === "ArrowRight") { t = Math.min(t + 1, duration()); follow = false; render(); }
+  if (e.key === "ArrowLeft") { t = Math.max(t - 1, 0); follow = false; render(); }
+});
+
+// ------------------------------------------------------------ maps
+function drawMap(c, big) {
+  const [g, W, H] = sizeCanvas(c);
+  g.clearRect(0, 0, W, H);
+  if (!run || !run.course) return;
+  const cr = run.course, [x0, y0, x1, y1] = cr.lot, pad = big ? 24 : 6;
+  const s = Math.min((W - 2 * pad) / (x1 - x0), (H - 2 * pad) / (y1 - y0));
+  const ox = (W - (x1 - x0) * s) / 2, oy = (H - (y1 - y0) * s) / 2;
+  const P = (x, y) => [ox + (x - x0) * s, H - (oy + (y - y0) * s)];
+  g.fillStyle = css("--sunk"); g.beginPath(); g.roundRect(...P(x0, y1), (x1 - x0) * s, (y1 - y0) * s, 8); g.fill();
+  g.strokeStyle = css("--panel"); g.lineWidth = Math.max(2 * cr.half_width * s, 2); g.lineJoin = g.lineCap = "round";
+  g.beginPath(); cr.centre.forEach(([x, y], i) => i ? g.lineTo(...P(x, y)) : g.moveTo(...P(x, y))); g.stroke();
+  for (const pose of [cr.start, cr.finish]) {
+    const [x, y, hd] = pose, nx = -Math.sin(hd) * 3.6, ny = Math.cos(hd) * 3.6;
+    g.strokeStyle = css("--text"); g.lineWidth = big ? 3 : 1.5; g.beginPath();
+    g.moveTo(...P(x - nx, y - ny)); g.lineTo(...P(x + nx, y + ny)); g.stroke();
+  }
+  const down = conesAt(t);
+  cr.cones.forEach(([x, y], i) => {
+    const hit = down.has(i), [px, py] = hit ? P(...down.get(i)) : P(x, y);
+    g.fillStyle = hit ? css("--red") : css("--orange");
+    g.beginPath(); g.arc(px, py, (big ? 2.6 : 1.3) * (hit ? 1.6 : 1), 0, 7); g.fill();
+  });
+  const tr = run.trace;
+  if (tr.length > 1) {
+    g.strokeStyle = css("--blue"); g.lineWidth = big ? 3 : 2; g.beginPath();
+    let first = true;
+    for (const r of tr) { if (r[T] > t) break; const p = P(r[X], r[Y]); if (first) { g.moveTo(...p); first = false; } else g.lineTo(...p); }
+    g.stroke();
+  }
+  const r = rowAt(t);
+  if (r) {
+    const [px, py] = P(r[X], r[Y]), k = Math.max(s, big ? 3 : 1.6);
+    g.save(); g.translate(px, py); g.rotate(-r[YAW]);
+    g.fillStyle = css("--text"); g.beginPath(); g.roundRect(-1.0 * k, -0.89 * k, 4.63 * k, 1.78 * k, k * 0.4); g.fill();
+    g.restore();
+  }
+}
+function drawMaps() { drawMap($("minic"), false); if ($("stage").classList.contains("map")) drawMap($("bigmap"), true); }
+$("tabcam").onclick = () => { $("stage").classList.remove("map"); $("tabcam").classList.add("on"); $("tabmap").classList.remove("on"); camShown = null; render(); };
+$("tabmap").onclick = () => { $("stage").classList.add("map"); $("tabmap").classList.add("on"); $("tabcam").classList.remove("on"); render(); };
+$("minimap").onclick = () => $("tabmap").click();
+for (const id of ["tpip", "tcard"]) $(id).onclick = () => { $(id).classList.toggle("on"); render(); };
+
+// ------------------------------------------------------------ telemetry lanes
+const LANES = [
+  { key: "speed", name: "Speed", color: "--blue", unit: "km/h", range: () => [0, Math.max(20, ...run.trace.map(r => r[V] * 3.6)) * 1.1],
+    val: r => r[V] * 3.6, label: r => `${fx(r[V] * 3.6, 0)}<span class="c"> km/h</span>`, sub: () => `0–${fx(Math.max(0, ...run.trace.map(r => r[V] * 3.6)), 0)} km/h` },
+  { key: "wheel", name: "Steering", color: "--green", range: () => [-1, 1], val: r => r[WHEEL], cmd: r => r[STEER],
+    label: r => `${fx(Math.abs(r[WHEEL]) * 100, 0)}<span class="c">% ${r[WHEEL] >= 0 ? "left" : "right"}</span>`, sub: () => "wheel, and what was asked (dashed)" },
+  { key: "lat", name: "Off centre", color: "--text", range: () => [-4.5, 4.5], val: r => r[LAT], bands: [3, 4],
+    label: r => `${fx(Math.abs(r[LAT]), 1)}<span class="c"> m ${r[LAT] >= 0 ? "left" : "right"}</span>`, sub: () => "cones at 3 m, out at 4 m" },
+  { key: "bear", name: "Direction", color: "--blue", range: () => [-45, 45], decisions: true, bearing: true,
+    label: () => { const d = decisionAt(t); return d && d.bearing != null ? `${fx(Math.abs(deg(d.bearing)), 0)}<span class="c">° ${d.bearing >= 0 ? "left" : "right"}</span>` : "–"; },
+    sub: () => "answered (dots) and true (line), + left" },
+  { key: "conf", name: "Confidence", color: "--blue", range: () => [0, 1], decisions: true,
+    label: () => { const d = decisionAt(t); return d && d.conf != null ? fx(d.conf, 2) : "–"; }, sub: () => "of each decision" },
+];
+function buildLanes() {
+  const lanes = LANES.filter(l => l.bearing ? run.log.some(d => d.bearing != null)
+                                            : (!l.decisions || run.log.some(d => d.conf != null)));
+  $("lanes").innerHTML = lanes.map(l => `<div class="lane-l"><span style="color:var(${l.color === "--text" ? "--muted" : l.color})">${l.name}</span><b class="num" id="lv-${l.key}">–</b><small id="ls-${l.key}">${l.sub()}</small></div>
+    <div class="lane-c" data-k="${l.key}"><canvas></canvas></div>`).join("") +
+    `<div class="lane-l"><span>Decisions</span><small>ticks; cone hits in red</small></div><div class="lane-c thin" data-k="ticks"><canvas></canvas></div>`;
+  $("lanes").querySelectorAll(".lane-c").forEach(el => el.addEventListener("pointerdown", e => {
+    const rect = el.getBoundingClientRect(); t = (e.clientX - rect.left) / rect.width * duration(); follow = false; render();
+  }));
+}
+function drawLanes() {
+  const dur = Math.max(duration(), 0.001), r = rowAt(t);
+  for (const el of $("lanes").querySelectorAll(".lane-c")) {
+    const [g, w, h] = sizeCanvas(el.querySelector("canvas")), k = el.dataset.k;
+    const Xs = s => s / dur * w;
+    g.clearRect(0, 0, w, h);
+    if (k === "ticks") {
+      g.fillStyle = css("--range");
+      for (const d of run.log) g.fillRect(Xs(d.t), 5, 1, h - 10);
+      g.fillStyle = css("--red");
+      for (const [te] of run.cones) g.fillRect(Xs(te) - 1, 2, 2, h - 4);
+    } else {
+      const L = LANES.find(l => l.key === k), [lo, hi] = L.range(), Ys = v => h - 4 - (v - lo) / (hi - lo) * (h - 8);
+      g.strokeStyle = css("--grid"); g.lineWidth = 1;
+      if (lo < 0) { g.beginPath(); g.moveTo(0, Ys(0)); g.lineTo(w, Ys(0)); g.stroke(); }
+      if (L.bands) for (const b of L.bands) {
+        g.setLineDash([3, 3]); g.strokeStyle = b === L.bands[L.bands.length - 1] ? css("--red") : css("--orange");
+        for (const sgn of [1, -1]) { g.beginPath(); g.moveTo(0, Ys(sgn * b)); g.lineTo(w, Ys(sgn * b)); g.stroke(); }
+        g.setLineDash([]);
+      }
+      g.strokeStyle = css(L.color); g.lineWidth = 1.5;
+      if (L.bearing) {
+        g.strokeStyle = css("--muted"); g.beginPath(); let first = true;
+        for (const d of run.log) if (d.truth != null) { const p = [Xs(d.t), Ys(deg(d.truth))]; first ? g.moveTo(...p) : g.lineTo(...p); first = false; }
+        g.stroke();
+        g.fillStyle = css(L.color);
+        for (const d of run.log) if (d.bearing != null) { g.beginPath(); g.arc(Xs(d.t), Ys(deg(d.bearing)), 1.8, 0, 7); g.fill(); }
+      } else if (L.decisions) {
+        g.fillStyle = css(L.color);
+        for (const d of run.log) if (d.conf != null) { g.beginPath(); g.arc(Xs(d.t), Ys(d.conf), 1.6, 0, 7); g.fill(); }
+      } else {
+        const step = Math.max(1, Math.floor(run.trace.length / w));
+        if (L.cmd) {
+          g.save(); g.setLineDash([3, 3]); g.globalAlpha = .6; g.beginPath();
+          run.trace.forEach((row, i) => { if (i % step) return; const p = [Xs(row[T]), Ys(L.cmd(row))]; i ? g.lineTo(...p) : g.moveTo(...p); });
+          g.stroke(); g.restore();
+        }
+        g.beginPath();
+        run.trace.forEach((row, i) => { if (i % step) return; const p = [Xs(row[T]), Ys(L.val(row))]; i ? g.lineTo(...p) : g.moveTo(...p); });
+        g.stroke();
+      }
+      const lv = $("lv-" + k); if (lv && r) lv.innerHTML = L.label(r);
+      const ls = $("ls-" + k); if (ls) ls.textContent = L.sub();
+    }
+    g.fillStyle = css("--blue"); g.fillRect(Xs(t) - 1, 0, 2, h);
+  }
+}
+
+// ------------------------------------------------------------ feed
+const ICON = {
+  dec: '<span class="icon b"><svg viewBox="0 0 10 10"><path d="M1 5 H7 M5 2 L8 5 L5 8" stroke="#fff" stroke-width="1.6" fill="none"/></svg></span>',
+  start: '<span class="icon g"><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="2.5"/></svg></span>',
+  hit: '<span class="icon r"><svg viewBox="0 0 10 10"><path d="M5 1 L9 9 H1 Z"/></svg></span>',
+};
+let feedItems = [];
+const thumbObs = new IntersectionObserver(es => es.forEach(e => {
+  if (e.isIntersecting && e.target.dataset.src) { e.target.src = e.target.dataset.src; delete e.target.dataset.src; thumbObs.unobserve(e.target); }
+}), { root: $("feed"), rootMargin: "400px" });
+function decisionHTML(d, i) {
+  let body;
+  if (d.bearing != null) {
+    const src = d.frame ? "data:image/jpeg;base64," + d.frame : frameURL(d.t, run.size[0], run.size[1]);
+    body = (isModel() ? `<img alt="" ${d.frame ? `src="${src}"` : `data-src="${src}"`}>` : "") +
+      (d.views ? viewBars(d.views) : "") + answerLines(d, false);
+  } else {
+    body = `<div class="t">wheel <b>${d.steer >= 0 ? "+" : ""}${fx(d.steer * 100, 0)}%</b> · <b>${d.accel >= 0 ? "+" : ""}${fx(d.accel, 1)}</b> m/s²</div>`;
+  }
+  return `<div class="ev dec" data-t="${d.t}"><div class="h">${ICON.dec}decide <small class="num">${fmtT(d.t)}</small><span class="grow"></span><small>#${i + 1}</small></div>${body}</div>`;
+}
+function buildFeed() {
+  const items = run.log.map((d, i) => ({ t: d.t, html: decisionHTML(d, i) }));
+  const st = run.summary ? run.summary.started_at : run.started_at;
+  if (st != null) items.push({ t: st, html: `<div class="ev note" data-t="${st}"><div class="h">${ICON.start}start line <small class="num">${fmtT(st)}</small></div></div>` });
+  for (const [te, j] of run.cones) items.push({ t: te, html: `<div class="ev note hit" data-t="${te}"><div class="h">${ICON.hit}cone hit <small class="num">${fmtT(te)} · #${j}</small></div></div>` });
+  if (run.summary) {
+    const s = run.summary, et = duration();
+    items.push({ t: et, html: `<div class="ev end" data-t="${et}"><div class="h">${s.status === "finished" ? "Finished" : "Ended: " + esc(s.status)} <small class="num">${fmtT(et)}</small></div>
+      <div class="t">progress ${pct(s.progress, 1)} · ${s.cones_hit} cones · ${s.decisions} decisions${s.time != null ? " · course time " + fx(s.time) + " s" : ""}</div></div>` });
+  }
+  items.sort((a, b) => a.t - b.t);
+  feedItems = items;
+  $("feed").innerHTML = items.length ? items.map(x => x.html).join("") : '<div class="empty">No decisions yet.</div>';
+  $("feed").querySelectorAll("img[data-src]").forEach(img => thumbObs.observe(img));
+  $("feed").querySelectorAll(".ev").forEach(el => el.onclick = () => { t = +el.dataset.t; follow = false; render(); });
+}
+function appendFeed(html) {
+  // Live events arrive in the order they land, not the order of their pictures: insert by time.
+  const f = $("feed"); if (f.querySelector(".empty")) f.innerHTML = "";
+  const tmp = document.createElement("div"); tmp.innerHTML = html;
+  const el = tmp.firstElementChild, te = +el.dataset.t;
+  const after = [...f.children].find(c => +c.dataset.t > te);
+  f.insertBefore(el, after || null);
+  el.onclick = () => { t = +el.dataset.t; follow = false; render(); };
+  el.querySelectorAll("img[data-src]").forEach(img => thumbObs.observe(img));
+}
+let feedHover = false; $("feed").onmouseenter = () => feedHover = true; $("feed").onmouseleave = () => feedHover = false;
+let activeEl = null;
+function markFeed() {
+  const els = $("feed").querySelectorAll(".ev");
+  let cur = null;
+  for (const el of els) { if (+el.dataset.t <= t + 1e-6) cur = el; else break; }
+  if (cur !== activeEl) {
+    activeEl && activeEl.classList.remove("active");
+    cur && cur.classList.add("active");
+    activeEl = cur;
+    if (cur && !feedHover && (playing || follow)) {         // scroll the feed only, never the page
+      const f = $("feed"), top = cur.getBoundingClientRect().top - f.getBoundingClientRect().top + f.scrollTop,
+            bottom = top + cur.offsetHeight;
+      if (top < f.scrollTop) f.scrollTop = top - 8;
+      else if (bottom > f.scrollTop + f.clientHeight) f.scrollTop = bottom - f.clientHeight + 8;
+    }
+  }
+}
+
+// ------------------------------------------------------------ live
+const es = STATIC ? new EventTarget() : new EventSource("/events");
+es.addEventListener("run", e => {
+  const m = JSON.parse(e.data);
+  liveMeta = m;
+  run = newRun(m, m.course, true);
+  setupRun(); t = 0; follow = true; setPlaying(false);
+  history.replaceState(null, "", "#live");
+  problem("");
+});
+es.addEventListener("tick", e => {
+  const m = JSON.parse(e.data);
+  if (!run || !run.live) return;
+  const prev = run.trace[run.trace.length - 1];
+  if (prev) run.distance += Math.hypot(m.row[X] - prev[X], m.row[Y] - prev[Y]);
+  run.trace.push(m.row);
+  for (const c of m.cones) {
+    run.cones.push(c);
+    appendFeed(`<div class="ev note hit" data-t="${c[0]}"><div class="h">${ICON.hit}cone hit <small class="num">${fmtT(c[0])} · #${c[1]}</small></div></div>`);
+  }
+  if (m.started_at != null && run.started_at == null) {
+    run.started_at = m.started_at;
+    appendFeed(`<div class="ev note" data-t="${m.started_at}"><div class="h">${ICON.start}start line <small class="num">${fmtT(m.started_at)}</small></div></div>`);
+  }
+  run.status = m.status; run.thinking = m.thinking;
+  if (follow) t = m.row[T];
+  if (!$("runview").hidden) render();
+});
+es.addEventListener("decision", e => {
+  const d = JSON.parse(e.data);
+  if (!run || !run.live) return;
+  run.log.push(d);
+  if (run.log.length === 1) buildLanes();
+  appendFeed(decisionHTML(d, run.log.length - 1));
+});
+es.addEventListener("done", e => {
+  const s = JSON.parse(e.data);
+  liveMeta = null;
+  if (run && run.live && run.id === s.id) {
+    const keepT = t;
+    openRun(s.id).then(() => { t = keepT; setPlaying(false); render(); });
+  }
+  if (!$("runsview").hidden) loadRuns();
+});
+es.addEventListener("problem", e => problem(JSON.parse(e.data).message));
+function problem(msg) { $("problem").textContent = msg; $("problem").style.display = msg ? "block" : "none"; }
+
+// ------------------------------------------------------------ controls
+$("newbtn").onclick = () => $("newrun").showModal();
+$("newform").addEventListener("submit", e => {
+  if (e.submitter && e.submitter.value !== "start") return;
+  const f = new FormData($("newform"));
+  fetch("/api/start", { method: "POST", body: JSON.stringify({ policy: f.get("policy"), seed: +f.get("seed"),
+    mode: f.get("mode"), mirror: f.get("mirror") === "on", strict: f.get("strict") === "on", latency: f.get("latency") === "" ? null : +f.get("latency") }) });
+});
+$("stopbtn").onclick = () => fetch("/api/stop", { method: "POST", body: "{}" });
+$("back").onclick = $("home").onclick = () => { show("runs"); history.replaceState(null, "", "#"); setPlaying(false); loadRuns(); };
+const keys = {};
+const sendKeys = () => fetch("/api/keys", { method: "POST", body: JSON.stringify(keys) });
+addEventListener("keydown", e => {
+  if (!run || !run.live || run.policy !== "human" || !e.key.startsWith("Arrow")) return;
+  e.preventDefault(); if (!keys[e.key]) { keys[e.key] = true; sendKeys(); }
+});
+addEventListener("keyup", e => { if (keys[e.key]) { keys[e.key] = false; sendKeys(); } });
+addEventListener("resize", () => render());
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => render());
+
+// ------------------------------------------------------------ start
+if (STATIC) { $("newbtn").hidden = true; }
+addEventListener("hashchange", () => {              // back, forward, or an edited link
+  const h = location.hash.slice(1);
+  if (h && h !== "live" && (!run || run.id !== h)) openRun(h);
+  else if (!h) { show("runs"); setPlaying(false); loadRuns(); }
+});
+(async () => {
+  await loadRuns();
+  const h = location.hash.slice(1);
+  if (h && h !== "live") openRun(h); else show("runs");
+})();
+</script>
+</body>
+</html>

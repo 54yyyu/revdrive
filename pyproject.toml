@@ -1,0 +1,32 @@
+[project]
+name = "revdrive"
+version = "0.1.0"
+description = "A one-pass decision model drives a car through a cone course from what a camera sees"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Steven Yu" }]
+# rev reads the served vision model (Remote.read_tokens); moderngl draws the
+# cameras headless (OpenGL 4.1: macOS, or Linux with a GPU or EGL).
+dependencies = ["numpy>=1.26", "pillow>=10.1", "moderngl>=5.10", "rev @ git+https://github.com/54yyyu/rev"]
+
+[project.optional-dependencies]
+# scripts/build_site.py: charts for the site; videos need ffmpeg on PATH.
+site = ["matplotlib>=3.8"]
+
+[project.scripts]
+revdrive = "revdrive.cli:main"
+
+[project.urls]
+Homepage = "https://54yyyu.github.io/revdrive"
+Repository = "https://github.com/54yyyu/revdrive"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/revdrive"]
