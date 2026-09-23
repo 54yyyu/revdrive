@@ -18,7 +18,7 @@ site = ["matplotlib>=3.8"]
 revdrive = "revdrive.cli:main"
 
 [project.urls]
-Homepage = "https://54yyyu.github.io/revdrive"
+Homepage = "https://stevenyuyy.com/revdrive"
 Repository = "https://github.com/54yyyu/revdrive"
 
 [build-system]

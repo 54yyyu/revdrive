@@ -6,7 +6,7 @@ asks a served vision model ten left-or-right questions about the camera view and
 reads one token back from each; a controller drives to where the answers say the
 course goes.
 
-**[Results and replays →](https://54yyyu.github.io/revdrive)**
+**[Results and replays →](https://stevenyuyy.com/revdrive)**
 
 ![rev on course 0: the camera view, the course map, and the model's answers](docs/replay.png)
 
